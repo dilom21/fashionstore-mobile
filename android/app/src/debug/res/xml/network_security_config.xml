@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Configuración EXCLUSIVA de desarrollo (ubicada en src/debug, no afecta
+         a los builds de release).
+
+         El backend FastAPI local se consume por HTTP sin cifrar durante el
+         desarrollo:
+           - Emulador Android : http://10.0.2.2:8000
+           - Teléfono por USB : http://127.0.0.1:8000  (con `adb reverse`)
+
+         Por eso se permite tráfico cleartext únicamente en debug. Producción
+         conserva el comportamiento seguro por defecto (HTTPS obligatorio). -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -1,30 +1,35 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Test smoke de la primera funcionalidad real: al abrir la app se comprueba la
+// sesión guardada y, sin token, se muestra la pantalla de login.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fashionstore_mobile/main.dart';
 
+Future<void> _pumpApp(WidgetTester tester) async {
+  await tester.pumpWidget(const FashionStoreApp());
+  // La restauración de sesión resuelve de inmediato porque no hay
+  // API_BASE_URL configurada en el entorno de pruebas (y no hay token).
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+}
+
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Muestra el login cuando no hay sesión guardada', (tester) async {
+    await _pumpApp(tester);
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('VANTER MEN'), findsWidgets);
+    expect(find.text('INICIAR SESIÓN'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('Valida el formulario antes de enviar', (tester) async {
+    await _pumpApp(tester);
+
+    await tester.ensureVisible(find.text('INICIAR SESIÓN'));
+    await tester.pump();
+    await tester.tap(find.text('INICIAR SESIÓN'));
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Ingresa tu correo electrónico.'), findsOneWidget);
+    expect(find.text('Ingresa tu contraseña.'), findsOneWidget);
   });
 }
