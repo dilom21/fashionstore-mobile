@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../autenticacion_seguridad/pages/login/login_page.dart';
 import '../../autenticacion_seguridad/services/auth_service.dart';
+import '../../catalogo/pages/catalogo_page.dart';
 import 'inicio_page.dart';
 
 /// Contenedor principal del CLIENTE autenticado.
@@ -24,7 +25,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   /// Secciones de la navegación inferior (Inicio es la inicial).
   static const List<Widget> _secciones = [
     InicioPage(),
-    _CatalogoPlaceholderPage(),
+    CatalogoPage(),
     _VestidorPlaceholderPage(),
     _CarritoPlaceholderPage(),
     _PerfilPlaceholderPage(),
@@ -188,18 +189,6 @@ class _SeccionProximamente extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Placeholder de Catálogo (sin funcionalidad real todavía).
-class _CatalogoPlaceholderPage extends StatelessWidget {
-  const _CatalogoPlaceholderPage();
-
-  @override
-  Widget build(BuildContext context) => const _SeccionProximamente(
-        title: 'Catálogo',
-        icon: Icons.grid_view_rounded,
-        message: 'Muy pronto podrás descubrir nuestras colecciones.',
-      );
 }
 
 /// Placeholder del Vestidor Virtual (futuro acceso a la cámara).

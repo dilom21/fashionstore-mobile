@@ -28,6 +28,24 @@ class ApiConfig {
   /// Endpoint para obtener el usuario autenticado actual.
   static String get authMeUrl => '$baseUrl/auth/me';
 
+  // ---------------------------------------------------------------------------
+  // CU09 - Catálogo público (sin autenticación)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint de listado de productos activos con filtros opcionales.
+  static String get productosUrl => '$baseUrl/productos';
+
+  /// Endpoint de detalle de un producto (incluye recursos y variantes).
+  static String productoDetalleUrl(int productoId) =>
+      '$baseUrl/productos/$productoId';
+
+  /// Endpoint de disponibilidad de un producto por sucursal.
+  static String productoDisponibilidadUrl(int productoId) =>
+      '$baseUrl/productos/$productoId/disponibilidad';
+
+  /// Endpoint de opciones de filtros del catálogo.
+  static String get catalogoFiltrosUrl => '$baseUrl/catalogo/filtros';
+
   /// Ayuda para desarrollo cuando falta configurar la URL base.
   static const String missingBaseUrlHint =
       'Falta configurar API_BASE_URL. Ejecuta la app con '
