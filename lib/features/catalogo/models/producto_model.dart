@@ -107,6 +107,10 @@ class RecursoProducto {
 }
 
 /// Variante de un producto (talla/color) usada para mostrar opciones.
+///
+/// Cada variante puede exponer sus [inventarios] reales por sucursal y
+/// temporada; de ahí se obtiene el `inventario_id` que exige CU15 para agregar
+/// una prenda al carrito.
 class VarianteProducto {
   const VarianteProducto({
     required this.id,
@@ -116,6 +120,7 @@ class VarianteProducto {
     required this.tallaNombre,
     required this.colorId,
     required this.colorNombre,
+    this.inventarios = const <InventarioProducto>[],
   });
 
   factory VarianteProducto.fromJson(Map<String, dynamic> json) =>
@@ -127,6 +132,7 @@ class VarianteProducto {
         tallaNombre: _nombreDe(json['talla']),
         colorId: _idDe(json['color']),
         colorNombre: _nombreDe(json['color']),
+        inventarios: _listaDe(json['inventarios'], InventarioProducto.fromJson),
       );
 
   final int id;
@@ -136,7 +142,81 @@ class VarianteProducto {
   final String tallaNombre;
   final int? colorId;
   final String colorNombre;
+
+  /// Inventarios reales de la variante (uno por sucursal/temporada).
+  final List<InventarioProducto> inventarios;
+
+  /// Inventarios con stock disponible mayor a cero.
+  List<InventarioProducto> get inventariosConStock => inventarios
+      .where((InventarioProducto inventario) => inventario.stockDisponible > 0)
+      .toList();
+
+  bool get tieneStock => inventariosConStock.isNotEmpty;
 }
+
+/// Inventario real de una variante en una sucursal y temporada.
+///
+/// Es la fuente del `inventario_id` que consume `POST /carritos/items`: el
+/// backend deriva producto, variante, talla y color a partir de ese id.
+class InventarioProducto {
+  const InventarioProducto({
+    required this.id,
+    required this.stockActual,
+    required this.stockReservado,
+    required this.stockDisponible,
+    required this.fechaActualizacion,
+    required this.sucursalId,
+    required this.sucursalNombre,
+    required this.sucursalDireccion,
+    required this.temporadaId,
+    required this.temporadaNombre,
+  });
+
+  factory InventarioProducto.fromJson(Map<String, dynamic> json) {
+    final Object? sucursal = json['sucursal'];
+    final Object? temporada = json['temporada'];
+
+    return InventarioProducto(
+      id: _toInt(json['id']),
+      stockActual: _toInt(json['stock_actual']),
+      stockReservado: _toInt(json['stock_reservado']),
+      stockDisponible: _toInt(json['stock_disponible']),
+      fechaActualizacion: _toNullableString(json['fecha_actualizacion']),
+      sucursalId: _idDe(sucursal) ?? _toNullableInt(json['sucursal_id']),
+      sucursalNombre: _nombreOTexto(sucursal),
+      sucursalDireccion: _direccionDe(sucursal),
+      temporadaId: _idDe(temporada) ?? _toNullableInt(json['temporada_id']),
+      temporadaNombre: _nombreOTexto(temporada),
+    );
+  }
+
+  final int id;
+
+  /// Stock físico actual reportado por el backend.
+  final int stockActual;
+
+  /// Unidades reservadas por el backend.
+  final int stockReservado;
+
+  /// Unidades realmente disponibles (nunca se recalcula en la app).
+  final int stockDisponible;
+
+  /// Fecha de actualización del inventario, tal como la entrega el backend.
+  final String? fechaActualizacion;
+
+  final int? sucursalId;
+  final String sucursalNombre;
+  final String sucursalDireccion;
+  final int? temporadaId;
+  final String temporadaNombre;
+
+  bool get tieneStock => stockDisponible > 0;
+
+  String get sucursalEtiqueta => sucursalNombre.trim().isEmpty
+      ? 'Sucursal ${sucursalId ?? id}'
+      : sucursalNombre.trim();
+}
+
 
 /// Detalle de producto (`GET /productos/{id}`), con recursos y variantes.
 class ProductoDetalle extends Producto {
@@ -229,6 +309,17 @@ class ProductoDetalle extends Producto {
         (VarianteProducto variante) => variante.colorId,
         (VarianteProducto variante) => variante.colorNombre,
       );
+
+  /// Variantes que exponen al menos un inventario real.
+  List<VarianteProducto> get variantesConInventario => variantes
+      .where((VarianteProducto variante) => variante.inventarios.isNotEmpty)
+      .toList();
+
+  /// Indica si existe alguna combinación real con stock disponible.
+  ///
+  /// Es la condición para poder agregar el producto al carrito (CU15).
+  bool get tieneInventarioConStock =>
+      variantes.any((VarianteProducto variante) => variante.tieneStock);
 }
 
 /// Opción id + nombre derivada de las variantes de un producto.
@@ -248,6 +339,25 @@ String _categoriaNombre(Object? value) => _nombreDe(value);
 String _nombreDe(Object? value) {
   if (value is Map<String, dynamic>) return _toString(value['nombre']);
   if (value is Map) return _toString(value['nombre']);
+  return '';
+}
+
+/// Nombre de un objeto anidado (`{nombre: ...}`) o el texto tal cual.
+///
+/// El backend puede exponer `sucursal`/`temporada` como objeto o como texto;
+/// ambos casos se resuelven aquí.
+String _nombreOTexto(Object? value) {
+  if (value == null) return '';
+  if (value is Map<String, dynamic>) return _toString(value['nombre']);
+  if (value is Map) return _toString(value['nombre']);
+  if (value is String) return value.trim();
+  return '';
+}
+
+/// Dirección de una sucursal anidada, si viene presente.
+String _direccionDe(Object? value) {
+  if (value is Map<String, dynamic>) return _toString(value['direccion']);
+  if (value is Map) return _toString(value['direccion']);
   return '';
 }
 

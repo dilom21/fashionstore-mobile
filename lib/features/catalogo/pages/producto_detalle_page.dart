@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../carrito/widgets/agregar_al_carrito_section.dart';
 import '../models/catalogo_filtros_model.dart';
 import '../models/producto_model.dart';
 import '../services/catalogo_service.dart';
@@ -199,6 +200,8 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
             ),
           ),
           const SizedBox(height: 18),
+          AgregarAlCarritoSection(producto: producto, onRecargar: _cargar),
+          const SizedBox(height: 24),
           if ((producto.descripcion?.trim() ?? '').isNotEmpty) ...[
             const _Subtitulo('DESCRIPCIÓN'),
             const SizedBox(height: 8),

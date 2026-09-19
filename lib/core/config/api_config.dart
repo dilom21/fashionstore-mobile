@@ -46,6 +46,39 @@ class ApiConfig {
   /// Endpoint de opciones de filtros del catálogo.
   static String get catalogoFiltrosUrl => '$baseUrl/catalogo/filtros';
 
+  // ---------------------------------------------------------------------------
+  // CU15 - Carrito del CLIENTE (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint para agregar una prenda al carrito activo de la sucursal.
+  static String get carritoItemsUrl => '$baseUrl/carritos/items';
+
+  /// Endpoint del listado de carritos activos del cliente.
+  static String get carritosUrl => '$baseUrl/carritos';
+
+  /// Endpoint del detalle de un carrito.
+  static String carritoDetalleUrl(int carritoId) =>
+      '$baseUrl/carritos/$carritoId';
+
+  /// Endpoint de una línea concreta del carrito.
+  static String carritoItemUrl(int carritoId, int detalleId) =>
+      '$baseUrl/carritos/$carritoId/items/$detalleId';
+
+  // ---------------------------------------------------------------------------
+  // CU16 - Reserva de prendas del CLIENTE (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint de creación (`POST`) y listado (`GET`) de reservas.
+  static String get reservasUrl => '$baseUrl/reservas';
+
+  /// Endpoint del detalle de una reserva.
+  static String reservaDetalleUrl(int reservaId) =>
+      '$baseUrl/reservas/$reservaId';
+
+  /// Endpoint de cancelación de una reserva.
+  static String reservaCancelarUrl(int reservaId) =>
+      '$baseUrl/reservas/$reservaId/cancelar';
+
   /// Ayuda para desarrollo cuando falta configurar la URL base.
   static const String missingBaseUrlHint =
       'Falta configurar API_BASE_URL. Ejecuta la app con '

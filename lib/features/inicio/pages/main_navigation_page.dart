@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../autenticacion_seguridad/pages/login/login_page.dart';
 import '../../autenticacion_seguridad/services/auth_service.dart';
+import '../../carrito/pages/carritos_page.dart';
 import '../../catalogo/pages/catalogo_page.dart';
+import '../../reservas/pages/reservas_page.dart';
 import 'inicio_page.dart';
 
 /// Contenedor principal del CLIENTE autenticado.
@@ -20,16 +22,42 @@ class MainNavigationPage extends StatefulWidget {
 }
 
 class _MainNavigationPageState extends State<MainNavigationPage> {
+  /// Índice de la pestaña Catálogo.
+  static const int _tabCatalogo = 1;
+
+  /// Índice de la pestaña Carrito.
+  static const int _tabCarrito = 3;
+
   int _selectedIndex = 0;
 
+  /// Permite refrescar el carrito al volver a su pestaña: el `IndexedStack`
+  /// mantiene viva la página, así que `initState` no es suficiente.
+  final GlobalKey<CarritosPageState> _carritoKey =
+      GlobalKey<CarritosPageState>();
+
   /// Secciones de la navegación inferior (Inicio es la inicial).
-  static const List<Widget> _secciones = [
-    InicioPage(),
-    CatalogoPage(),
-    _VestidorPlaceholderPage(),
-    _CarritoPlaceholderPage(),
-    _PerfilPlaceholderPage(),
+  late final List<Widget> _secciones = <Widget>[
+    const InicioPage(),
+    const CatalogoPage(),
+    const _VestidorPlaceholderPage(),
+    CarritosPage(
+      key: _carritoKey,
+      onExplorarCatalogo: () => _irATab(_tabCatalogo),
+    ),
+    _PerfilPlaceholderPage(onVerCarrito: () => _irATab(_tabCarrito)),
   ];
+
+  void _irATab(int index) {
+    if (!mounted) return;
+    setState(() => _selectedIndex = index);
+  }
+
+  void _onDestinationSelected(int index) {
+    setState(() => _selectedIndex = index);
+    if (index == _tabCarrito) {
+      _carritoKey.currentState?.recargar();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,8 +88,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
           selectedIndex: _selectedIndex,
           height: 68,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          onDestinationSelected: (index) =>
-              setState(() => _selectedIndex = index),
+          onDestinationSelected: _onDestinationSelected,
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.home_outlined),
@@ -191,6 +218,86 @@ class _SeccionProximamente extends StatelessWidget {
   }
 }
 
+/// Opción táctil del perfil.
+class _OpcionPerfil extends StatelessWidget {
+  const _OpcionPerfil({
+    required this.icon,
+    required this.titulo,
+    required this.subtitulo,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String titulo;
+  final String subtitulo;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                height: 44,
+                width: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.32),
+                  ),
+                ),
+                child: Icon(icon, color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titulo,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitulo,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textMuted,
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Placeholder del Vestidor Virtual (futuro acceso a la cámara).
 class _VestidorPlaceholderPage extends StatelessWidget {
   const _VestidorPlaceholderPage();
@@ -204,24 +311,15 @@ class _VestidorPlaceholderPage extends StatelessWidget {
       );
 }
 
-/// Placeholder del Carrito (sin funcionalidad real todavía).
-class _CarritoPlaceholderPage extends StatelessWidget {
-  const _CarritoPlaceholderPage();
-
-  @override
-  Widget build(BuildContext context) => const _SeccionProximamente(
-        title: 'Carrito',
-        icon: Icons.shopping_bag_rounded,
-        message: 'Tu experiencia de compra estará disponible próximamente.',
-      );
-}
-
-/// Placeholder de Perfil.
+/// Perfil del cliente.
 ///
-/// Incluye temporalmente un botón para probar el cierre de sesión, ya que
-/// todavía no existe la funcionalidad real de perfil.
+/// Ofrece el acceso real a "Mis reservas" (CU16) y el cierre de sesión; el
+/// resto del perfil se implementará en otro caso de uso.
 class _PerfilPlaceholderPage extends StatefulWidget {
-  const _PerfilPlaceholderPage();
+  const _PerfilPlaceholderPage({required this.onVerCarrito});
+
+  /// Permite que "VER CARRITO" (estado vacío de reservas) cambie de pestaña.
+  final VoidCallback onVerCarrito;
 
   @override
   State<_PerfilPlaceholderPage> createState() => _PerfilPlaceholderPageState();
@@ -245,6 +343,14 @@ class _PerfilPlaceholderPageState extends State<_PerfilPlaceholderPage> {
     );
   }
 
+  void _abrirReservas() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReservasPage(onVerCarrito: widget.onVerCarrito),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -264,44 +370,73 @@ class _PerfilPlaceholderPageState extends State<_PerfilPlaceholderPage> {
         ),
       ),
       body: SafeArea(
+        top: false,
         child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
               children: [
-                Container(
-                  height: 76,
-                  width: 76,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    color: AppColors.primary,
-                    size: 32,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      height: 64,
+                      width: 64,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: const Icon(
+                        Icons.person_rounded,
+                        color: AppColors.primary,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Perfil',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            'Tu información personal estará disponible '
+                            'próximamente.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 28),
                 const Text(
-                  'Perfil',
+                  'MI CUENTA',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 11,
+                    letterSpacing: 1.6,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: AppColors.textMuted,
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Tu información personal estará disponible próximamente.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.5,
-                    color: AppColors.textMuted,
-                  ),
+                _OpcionPerfil(
+                  icon: Icons.event_available_rounded,
+                  titulo: 'Mis reservas',
+                  subtitulo: 'Consulta y administra tus reservas de prendas.',
+                  onTap: _abrirReservas,
                 ),
                 const SizedBox(height: 28),
                 OutlinedButton.icon(
