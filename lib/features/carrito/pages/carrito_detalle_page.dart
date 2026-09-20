@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/session/session_expired.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../reservas/pages/crear_reserva_page.dart';
+import '../../ventas/pages/checkout_digital_page.dart';
+import '../../ventas/services/venta_digital_service.dart';
 import '../models/carrito_model.dart';
 import '../services/carrito_service.dart';
 import '../widgets/aviso_vigencia.dart';
@@ -20,6 +22,7 @@ class CarritoDetallePage extends StatefulWidget {
     required this.carritoId,
     this.onBuscarMas,
     this.service,
+    this.ventaService,
   });
 
   /// Identificador real del carrito.
@@ -30,6 +33,9 @@ class CarritoDetallePage extends StatefulWidget {
 
   /// Servicio inyectable (facilita pruebas).
   final CarritoService? service;
+
+  /// Servicio de ventas inyectable para el checkout (facilita pruebas).
+  final VentaDigitalService? ventaService;
 
   @override
   State<CarritoDetallePage> createState() => _CarritoDetallePageState();
@@ -62,8 +68,9 @@ class _CarritoDetallePageState extends State<CarritoDetallePage> {
     });
 
     try {
-      final CarritoDetalle carrito =
-          await _service.obtenerCarrito(widget.carritoId);
+      final CarritoDetalle carrito = await _service.obtenerCarrito(
+        widget.carritoId,
+      );
       if (!mounted) return;
       setState(() {
         _carrito = carrito;
@@ -275,6 +282,31 @@ class _CarritoDetallePageState extends State<CarritoDetallePage> {
     await _cargar();
   }
 
+  /// CU19: abre el checkout digital sobre este carrito.
+  ///
+  /// Si la compra se prepara, el backend deja el carrito en CONVERTIDO, así que
+  /// esta pantalla vuelve al listado (que se recarga con `GET /carritos`).
+  Future<void> _irAPagar() async {
+    final bool? comprada = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => CheckoutDigitalPage(
+          carritoId: widget.carritoId,
+          carritoService: _service,
+          ventaService: widget.ventaService,
+        ),
+      ),
+    );
+    if (!mounted) return;
+
+    if (comprada == true) {
+      _volverAlListado('Tu compra quedó preparada. Continúa con el pago.');
+      return;
+    }
+
+    // Se revalida el carrito por si cambió mientras el cliente revisaba.
+    await _cargar();
+  }
+
   void _buscarMas() {
     final VoidCallback? callback = widget.onBuscarMas;
     if (callback != null) callback();
@@ -450,10 +482,9 @@ class _CarritoDetallePageState extends State<CarritoDetallePage> {
               // CU16: reservar solo con carrito ACTIVO y con unidades.
               onReservar:
                   carrito.estaActivo && carrito.cantidadTotalUnidades > 0
-                      ? _reservar
-                      : null,
-              onIrAPagar: () =>
-                  _mostrarMensaje('Proceso de pago disponible próximamente.'),
+                  ? _reservar
+                  : null,
+              onIrAPagar: _irAPagar,
               onBuscarMas: _buscarMas,
             ),
           ],
@@ -578,6 +609,3 @@ class _EstadoError extends StatelessWidget {
     );
   }
 }
-
-
-

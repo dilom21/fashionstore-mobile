@@ -45,8 +45,8 @@ class CarritoException implements Exception {
 class CarritoService {
   /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
   CarritoService({AuthStorage? storage, http.Client? client})
-      : _storage = storage ?? AuthStorage(),
-        _client = client ?? http.Client();
+    : _storage = storage ?? AuthStorage(),
+      _client = client ?? http.Client();
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -301,5 +301,3 @@ class CarritoService {
     }
   }
 }
-
-

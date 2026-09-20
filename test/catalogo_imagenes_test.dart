@@ -18,46 +18,42 @@ Producto _producto({
   int id = 1,
   String nombre = 'Polo Premium Piqué',
   String? imagen,
-}) =>
-    Producto(
-      id: id,
-      nombre: nombre,
-      descripcion: 'Prenda de prueba',
-      precio: 149.90,
-      estado: true,
-      categoriaId: 3,
-      categoriaNombre: 'Polos',
-      imagenPrincipalUrl: imagen,
-    );
+}) => Producto(
+  id: id,
+  nombre: nombre,
+  descripcion: 'Prenda de prueba',
+  precio: 149.90,
+  estado: true,
+  categoriaId: 3,
+  categoriaNombre: 'Polos',
+  imagenPrincipalUrl: imagen,
+);
 
 RecursoProducto _recurso(
   int id,
   String url, {
   bool principal = false,
   String tipo = 'imagen',
-}) =>
-    RecursoProducto(
-      id: id,
-      tipo: tipo,
-      url: url,
-      esPrincipal: principal,
-      colorNombre: null,
-    );
+}) => RecursoProducto(
+  id: id,
+  tipo: tipo,
+  url: url,
+  esPrincipal: principal,
+  colorNombre: null,
+);
 
 Widget _envolver(Widget child) => MaterialApp(
-      home: Scaffold(body: Center(child: child)),
-    );
+  home: Scaffold(body: Center(child: child)),
+);
 
 /// Envuelve la galería con un ancho acotado (como en el detalle real, donde
 /// vive dentro de un scroll vertical) para que el carrusel 4:5 no desborde el
 /// viewport de prueba.
 Widget _envolverGaleria(Widget child) => MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: SizedBox(width: 340, child: child),
-        ),
-      ),
-    );
+  home: Scaffold(
+    body: Center(child: SizedBox(width: 340, child: child)),
+  ),
+);
 
 void main() {
   group('ProductoCard / ProductImage', () {
@@ -157,8 +153,9 @@ void main() {
       );
     });
 
-    testWidgets('2 recursos permiten cambiar de página con la miniatura',
-        (tester) async {
+    testWidgets('2 recursos permiten cambiar de página con la miniatura', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _envolverGaleria(
           ProductoMedia(
@@ -189,12 +186,13 @@ void main() {
       expect(thumb1.properties.selected, isTrue);
     });
 
-    testWidgets('N recursos y reducción de la lista no producen RangeError',
-        (tester) async {
+    testWidgets('N recursos y reducción de la lista no producen RangeError', (
+      tester,
+    ) async {
       final List<RecursoProducto> cinco = List<RecursoProducto>.generate(
         5,
-        (int i) => _recurso(i + 1, 'https://cdn.test/$i.webp',
-            principal: i == 0),
+        (int i) =>
+            _recurso(i + 1, 'https://cdn.test/$i.webp', principal: i == 0),
       );
 
       await tester.pumpWidget(
@@ -221,8 +219,9 @@ void main() {
   });
 
   group('CatalogoPage (anti N+1)', () {
-    testWidgets('el listado no solicita el detalle por cada card',
-        (tester) async {
+    testWidgets('el listado no solicita el detalle por cada card', (
+      tester,
+    ) async {
       final _SpyCatalogoService spy = _SpyCatalogoService(<Producto>[
         _producto(id: 1, nombre: 'Polo', imagen: 'https://cdn.test/1.webp'),
         _producto(id: 2, nombre: 'Traje', imagen: 'https://cdn.test/2.webp'),
@@ -254,18 +253,17 @@ class _SpyCatalogoService extends CatalogoService {
     int? coleccionId,
     int? sucursalId,
     bool? conStock,
-  }) async =>
-      _productos;
+  }) async => _productos;
 
   @override
   Future<CatalogoFiltros> obtenerFiltros() async => const CatalogoFiltros(
-        categorias: <OpcionFiltro>[],
-        tallas: <OpcionFiltro>[],
-        colores: <OpcionFiltro>[],
-        temporadas: <OpcionFiltro>[],
-        colecciones: <ColeccionFiltro>[],
-        sucursales: <SucursalFiltro>[],
-      );
+    categorias: <OpcionFiltro>[],
+    tallas: <OpcionFiltro>[],
+    colores: <OpcionFiltro>[],
+    temporadas: <OpcionFiltro>[],
+    colecciones: <ColeccionFiltro>[],
+    sucursales: <SucursalFiltro>[],
+  );
 
   @override
   Future<ProductoDetalle> obtenerProducto(int productoId) async {

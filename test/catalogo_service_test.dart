@@ -14,8 +14,7 @@ void main() {
     });
 
     test('arma todos los parámetros de filtros actuales', () {
-      final Map<String, String> query =
-          CatalogoService.construirQueryProductos(
+      final Map<String, String> query = CatalogoService.construirQueryProductos(
         buscar: '  polo  ',
         categoriaId: 3,
         tallaId: 5,
@@ -46,15 +45,15 @@ void main() {
     });
 
     test('búsqueda vacía no agrega el parámetro buscar', () {
-      expect(
-        CatalogoService.construirQueryProductos(buscar: '   '),
-        isEmpty,
-      );
+      expect(CatalogoService.construirQueryProductos(buscar: '   '), isEmpty);
     });
 
     test('filtros nulos no se agregan', () {
       expect(
-        CatalogoService.construirQueryProductos(categoriaId: null, tallaId: null),
+        CatalogoService.construirQueryProductos(
+          categoriaId: null,
+          tallaId: null,
+        ),
         isEmpty,
       );
     });

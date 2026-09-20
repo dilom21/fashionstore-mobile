@@ -47,10 +47,7 @@ class ReservaCard extends StatelessWidget {
                   ),
                 ),
               ),
-              ReservaEstadoBadge(
-                estado: reserva.estadoReserva,
-                compact: true,
-              ),
+              ReservaEstadoBadge(estado: reserva.estadoReserva, compact: true),
             ],
           ),
           const SizedBox(height: 14),

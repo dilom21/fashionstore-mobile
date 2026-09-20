@@ -282,7 +282,6 @@ class CarritosPageState extends State<CarritosPage> {
       ),
     );
   }
-
 }
 
 /// Encabezado del listado: título, subtítulo, contador y aviso de vigencia.
@@ -408,7 +407,3 @@ class _EstadoError extends StatelessWidget {
     );
   }
 }
-
-
-
-

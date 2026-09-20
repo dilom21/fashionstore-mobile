@@ -192,7 +192,6 @@ class _ReservasPageState extends State<ReservasPage> {
       ),
     );
   }
-
 }
 
 /// Encabezado del listado: título, subtítulo y total real de reservas.
@@ -311,9 +310,7 @@ class _FiltrosReserva extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: activo ? FontWeight.w700 : FontWeight.w500,
-                    color: activo
-                        ? AppColors.textPrimary
-                        : AppColors.textMuted,
+                    color: activo ? AppColors.textPrimary : AppColors.textMuted,
                   ),
                 ),
               ),
@@ -397,5 +394,3 @@ class _EstadoError extends StatelessWidget {
     );
   }
 }
-
-

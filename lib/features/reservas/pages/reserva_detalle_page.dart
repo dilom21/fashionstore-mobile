@@ -56,8 +56,9 @@ class _ReservaDetallePageState extends State<ReservaDetallePage> {
     });
 
     try {
-      final ReservaDetalle reserva =
-          await _service.obtenerReserva(widget.reservaId);
+      final ReservaDetalle reserva = await _service.obtenerReserva(
+        widget.reservaId,
+      );
       if (!mounted) return;
       setState(() {
         _reserva = reserva;
@@ -91,7 +92,9 @@ class _ReservaDetallePageState extends State<ReservaDetallePage> {
     if (_reserva == null || _cancelando) return;
 
     final String? motivo = await _pedirMotivo();
-    if (motivo == null || !mounted) return; // `null`: el cliente cerró el modal.
+    if (motivo == null || !mounted) {
+      return; // `null`: el cliente cerró el modal.
+    }
 
     setState(() => _cancelando = true);
     try {
@@ -221,9 +224,8 @@ class _ReservaDetallePageState extends State<ReservaDetallePage> {
   }
 
   void _verMisReservas() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const ReservasPage()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const ReservasPage()));
   }
 
   void _mostrarMensaje(String mensaje) {
@@ -562,11 +564,7 @@ class _SinPrendas extends StatelessWidget {
       ),
       child: const Column(
         children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            size: 28,
-            color: AppColors.inactive,
-          ),
+          Icon(Icons.inventory_2_outlined, size: 28, color: AppColors.inactive),
           SizedBox(height: 12),
           Text(
             'Esta reserva no tiene prendas registradas.',
@@ -595,8 +593,7 @@ class _AvisoNoEditable extends StatelessWidget {
       EstadoReserva.vencida => 'Esta reserva venció y no admite cambios.',
       EstadoReserva.pendiente ||
       EstadoReserva.confirmada ||
-      EstadoReserva.desconocido =>
-        'Esta reserva no admite cambios.',
+      EstadoReserva.desconocido => 'Esta reserva no admite cambios.',
     };
 
     return Container(
@@ -686,10 +683,6 @@ class _EstadoError extends StatelessWidget {
 
 /// Borde redondeado de los campos de texto de la feature.
 OutlineInputBorder _bordeInput(Color color) => OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: color),
-    );
-
-
-
-
+  borderRadius: BorderRadius.circular(14),
+  borderSide: BorderSide(color: color),
+);

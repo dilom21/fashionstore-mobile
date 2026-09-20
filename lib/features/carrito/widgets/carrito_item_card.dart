@@ -174,9 +174,7 @@ class _DetallePrenda extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: etiquetas
-                .map(
-                  (String texto) => _EtiquetaVariante(texto: texto),
-                )
+                .map((String texto) => _EtiquetaVariante(texto: texto))
                 .toList(),
           ),
         ],
@@ -291,4 +289,3 @@ class _SubtotalLinea extends StatelessWidget {
     );
   }
 }
-

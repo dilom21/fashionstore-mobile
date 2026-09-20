@@ -116,10 +116,10 @@ class _CatalogoPageState extends State<CatalogoPage> {
 
     final CatalogoFiltrosSeleccion? resultado =
         await CatalogoFiltrosSheet.mostrar(
-      context,
-      filtros: filtros,
-      seleccion: _seleccion,
-    );
+          context,
+          filtros: filtros,
+          seleccion: _seleccion,
+        );
 
     if (resultado == null) return;
     setState(() => _seleccion = resultado);
@@ -297,8 +297,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
       return _EstadoCentrado(
         icon: Icons.checkroom_rounded,
         titulo: 'Sin resultados',
-        mensaje: _seleccion.estaVacio &&
-                _busquedaController.text.trim().isEmpty
+        mensaje: _seleccion.estaVacio && _busquedaController.text.trim().isEmpty
             ? 'Todavía no hay productos disponibles en el catálogo.'
             : 'Prueba con otra búsqueda o ajusta los filtros.',
         accionLabel: _seleccion.estaVacio ? null : 'Limpiar filtros',
@@ -332,9 +331,9 @@ class _CatalogoPageState extends State<CatalogoPage> {
   }
 
   OutlineInputBorder _borde(Color color) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: color),
-      );
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(color: color),
+  );
 }
 
 /// Botón de filtros con contador de filtros activos.

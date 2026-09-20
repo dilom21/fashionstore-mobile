@@ -31,8 +31,8 @@ class AuthException implements Exception {
 class AuthService {
   /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
   AuthService({AuthStorage? storage, http.Client? client})
-      : _storage = storage ?? AuthStorage(),
-        _client = client ?? http.Client();
+    : _storage = storage ?? AuthStorage(),
+      _client = client ?? http.Client();
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -114,7 +114,10 @@ class AuthService {
       throw const AuthException(_unexpectedErrorMessage);
     }
     if (token == null || token.isEmpty) {
-      throw const AuthException('Tu sesión no está activa.', unauthorized: true);
+      throw const AuthException(
+        'Tu sesión no está activa.',
+        unauthorized: true,
+      );
     }
 
     final http.Response response;

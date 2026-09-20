@@ -103,8 +103,8 @@ class _AgregarAlCarritoSectionState extends State<AgregarAlCarritoSection> {
   List<_Combinacion> get _deSucursal => _sucursalId == null
       ? _combinaciones
       : _combinaciones
-          .where((_Combinacion c) => c.sucursalId == _sucursalId)
-          .toList();
+            .where((_Combinacion c) => c.sucursalId == _sucursalId)
+            .toList();
 
   List<_Combinacion> get _deSucursalTalla {
     if (_talla == null) return _deSucursal;
@@ -119,28 +119,28 @@ class _AgregarAlCarritoSectionState extends State<AgregarAlCarritoSection> {
   }
 
   List<_Opcion<int>> get _opcionesSucursal => _opcionesDe<int>(
-        _combinaciones,
-        (_Combinacion c) => c.sucursalId,
-        (_Combinacion c) => c.sucursalNombre,
-      );
+    _combinaciones,
+    (_Combinacion c) => c.sucursalId,
+    (_Combinacion c) => c.sucursalNombre,
+  );
 
   List<_Opcion<String>> get _opcionesTalla => _opcionesDe<String>(
-        _deSucursal,
-        (_Combinacion c) => c.talla,
-        (_Combinacion c) => c.talla,
-      );
+    _deSucursal,
+    (_Combinacion c) => c.talla,
+    (_Combinacion c) => c.talla,
+  );
 
   List<_Opcion<String>> get _opcionesColor => _opcionesDe<String>(
-        _deSucursalTalla,
-        (_Combinacion c) => c.color,
-        (_Combinacion c) => c.color,
-      );
+    _deSucursalTalla,
+    (_Combinacion c) => c.color,
+    (_Combinacion c) => c.color,
+  );
 
   List<_Opcion<String>> get _opcionesTemporada => _opcionesDe<String>(
-        _deSucursalTallaColor,
-        (_Combinacion c) => c.temporada,
-        (_Combinacion c) => c.temporada,
-      );
+    _deSucursalTallaColor,
+    (_Combinacion c) => c.temporada,
+    (_Combinacion c) => c.temporada,
+  );
 
   /// Opciones únicas (valor → etiqueta), ignorando etiquetas vacías.
   static List<_Opcion<T>> _opcionesDe<T>(
@@ -739,8 +739,3 @@ class _Combinacion {
 
   final int stockDisponible;
 }
-
-
-
-
-

@@ -52,8 +52,9 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
     });
 
     try {
-      final ProductoDetalle producto =
-          await _service.obtenerProducto(widget.productoId);
+      final ProductoDetalle producto = await _service.obtenerProducto(
+        widget.productoId,
+      );
       if (!mounted) return;
       setState(() {
         _producto = producto;

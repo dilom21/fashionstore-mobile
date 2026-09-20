@@ -29,15 +29,15 @@ class Producto {
   });
 
   factory Producto.fromJson(Map<String, dynamic> json) => Producto(
-        id: _toInt(json['id']),
-        nombre: _toString(json['nombre']),
-        descripcion: _toNullableString(json['descripcion']),
-        precio: _toDouble(json['precio']),
-        estado: _toBool(json['estado'], fallback: true),
-        categoriaId: _toInt(json['categoria_id']),
-        categoriaNombre: _categoriaNombre(json['categoria']),
-        imagenPrincipalUrl: _toNullableString(json['imagen_principal_url']),
-      );
+    id: _toInt(json['id']),
+    nombre: _toString(json['nombre']),
+    descripcion: _toNullableString(json['descripcion']),
+    precio: _toDouble(json['precio']),
+    estado: _toBool(json['estado'], fallback: true),
+    categoriaId: _toInt(json['categoria_id']),
+    categoriaNombre: _categoriaNombre(json['categoria']),
+    imagenPrincipalUrl: _toNullableString(json['imagen_principal_url']),
+  );
 
   final int id;
   final String nombre;
@@ -217,7 +217,6 @@ class InventarioProducto {
       : sucursalNombre.trim();
 }
 
-
 /// Detalle de producto (`GET /productos/{id}`), con recursos y variantes.
 class ProductoDetalle extends Producto {
   const ProductoDetalle({
@@ -288,27 +287,27 @@ class ProductoDetalle extends Producto {
 
   /// Nombres de tallas únicos y no vacíos.
   List<String> get tallas => _nombresUnicos(
-        variantes.map((VarianteProducto variante) => variante.tallaNombre),
-      );
+    variantes.map((VarianteProducto variante) => variante.tallaNombre),
+  );
 
   /// Nombres de colores únicos y no vacíos.
   List<String> get colores => _nombresUnicos(
-        variantes.map((VarianteProducto variante) => variante.colorNombre),
-      );
+    variantes.map((VarianteProducto variante) => variante.colorNombre),
+  );
 
   /// Tallas (id + nombre) únicas para filtros de disponibilidad.
   List<OpcionVariante> get tallasOpciones => _opcionesUnicas(
-        variantes,
-        (VarianteProducto variante) => variante.tallaId,
-        (VarianteProducto variante) => variante.tallaNombre,
-      );
+    variantes,
+    (VarianteProducto variante) => variante.tallaId,
+    (VarianteProducto variante) => variante.tallaNombre,
+  );
 
   /// Colores (id + nombre) únicos para filtros de disponibilidad.
   List<OpcionVariante> get coloresOpciones => _opcionesUnicas(
-        variantes,
-        (VarianteProducto variante) => variante.colorId,
-        (VarianteProducto variante) => variante.colorNombre,
-      );
+    variantes,
+    (VarianteProducto variante) => variante.colorId,
+    (VarianteProducto variante) => variante.colorNombre,
+  );
 
   /// Variantes que exponen al menos un inventario real.
   List<VarianteProducto> get variantesConInventario => variantes
@@ -396,8 +395,10 @@ List<OpcionVariante> _opcionesUnicas(
     porId.putIfAbsent(id, () => nombre);
   }
   return porId.entries
-      .map((MapEntry<int, String> entry) =>
-          OpcionVariante(id: entry.key, nombre: entry.value))
+      .map(
+        (MapEntry<int, String> entry) =>
+            OpcionVariante(id: entry.key, nombre: entry.value),
+      )
       .toList();
 }
 

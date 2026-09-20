@@ -121,6 +121,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     );
   }
 }
+
 /// Pantalla temporal reutilizable para secciones aún no implementadas.
 class _SeccionProximamente extends StatelessWidget {
   const _SeccionProximamente({
@@ -304,11 +305,12 @@ class _VestidorPlaceholderPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _SeccionProximamente(
-        title: 'Vestidor Virtual',
-        icon: Icons.camera_alt_rounded,
-        message: 'Próximamente podrás probar nuevas experiencias utilizando '
-            'la cámara de tu dispositivo.',
-      );
+    title: 'Vestidor Virtual',
+    icon: Icons.camera_alt_rounded,
+    message:
+        'Próximamente podrás probar nuevas experiencias utilizando '
+        'la cámara de tu dispositivo.',
+  );
 }
 
 /// Perfil del cliente.
@@ -474,5 +476,3 @@ class _PerfilPlaceholderPageState extends State<_PerfilPlaceholderPage> {
     );
   }
 }
-
-

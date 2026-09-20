@@ -23,7 +23,9 @@ String formatearPrecio(double monto) => 'Bs ${monto.toStringAsFixed(2)}';
 String formatearActualizacion(DateTime? fecha) {
   if (fecha == null) return 'sin registro';
   final Duration diferencia = DateTime.now().difference(fecha);
-  if (diferencia.isNegative || diferencia.inMinutes < 1) return 'hace instantes';
+  if (diferencia.isNegative || diferencia.inMinutes < 1) {
+    return 'hace instantes';
+  }
   if (diferencia.inMinutes < 60) return 'hace ${diferencia.inMinutes} min';
   if (diferencia.inHours < 24) return 'hace ${diferencia.inHours} h';
   if (diferencia.inDays == 1) return 'ayer';
@@ -47,14 +49,14 @@ class CarritoResumen {
   });
 
   factory CarritoResumen.fromJson(Map<String, dynamic> json) => CarritoResumen(
-        carritoId: _toInt(json['carrito_id']),
-        sucursalId: _toInt(json['sucursal_id']),
-        sucursalNombre: _toString(json['sucursal_nombre']),
-        cantidadLineas: _toInt(json['cantidad_lineas']),
-        cantidadUnidades: _toInt(json['cantidad_unidades']),
-        subtotal: _toDouble(json['subtotal']),
-        fechaActualizacion: _toDateTime(json['fecha_actualizacion']),
-      );
+    carritoId: _toInt(json['carrito_id']),
+    sucursalId: _toInt(json['sucursal_id']),
+    sucursalNombre: _toString(json['sucursal_nombre']),
+    cantidadLineas: _toInt(json['cantidad_lineas']),
+    cantidadUnidades: _toInt(json['cantidad_unidades']),
+    subtotal: _toDouble(json['subtotal']),
+    fechaActualizacion: _toDateTime(json['fecha_actualizacion']),
+  );
 
   final int carritoId;
   final int sucursalId;
@@ -118,24 +120,24 @@ class CarritoItem {
   });
 
   factory CarritoItem.fromJson(Map<String, dynamic> json) => CarritoItem(
-        detalleId: _toInt(json['detalle_id']),
-        inventarioId: _toInt(json['inventario_id']),
-        productoId: _toInt(json['producto_id']),
-        productoNombre: _toString(json['producto_nombre']),
-        precioUnitario: _toDouble(json['precio_unitario']),
-        imagenPrincipal: _toNullableString(json['imagen_principal']),
-        varianteProductoId: _toNullableInt(json['variante_producto_id']),
-        sku: _toString(json['sku']),
-        tallaId: _toNullableInt(json['talla_id']),
-        tallaNombre: _toString(json['talla_nombre']),
-        colorId: _toNullableInt(json['color_id']),
-        colorNombre: _toString(json['color_nombre']),
-        temporadaId: _toNullableInt(json['temporada_id']),
-        temporadaNombre: _toString(json['temporada_nombre']),
-        cantidad: _toInt(json['cantidad']),
-        stockDisponible: _toInt(json['stock_disponible']),
-        subtotalLinea: _toDouble(json['subtotal_linea']),
-      );
+    detalleId: _toInt(json['detalle_id']),
+    inventarioId: _toInt(json['inventario_id']),
+    productoId: _toInt(json['producto_id']),
+    productoNombre: _toString(json['producto_nombre']),
+    precioUnitario: _toDouble(json['precio_unitario']),
+    imagenPrincipal: _toNullableString(json['imagen_principal']),
+    varianteProductoId: _toNullableInt(json['variante_producto_id']),
+    sku: _toString(json['sku']),
+    tallaId: _toNullableInt(json['talla_id']),
+    tallaNombre: _toString(json['talla_nombre']),
+    colorId: _toNullableInt(json['color_id']),
+    colorNombre: _toString(json['color_nombre']),
+    temporadaId: _toNullableInt(json['temporada_id']),
+    temporadaNombre: _toString(json['temporada_nombre']),
+    cantidad: _toInt(json['cantidad']),
+    stockDisponible: _toInt(json['stock_disponible']),
+    subtotalLinea: _toDouble(json['subtotal_linea']),
+  );
 
   final int detalleId;
   final int inventarioId;
@@ -190,30 +192,30 @@ class CarritoDetalle {
   });
 
   factory CarritoDetalle.fromJson(Map<String, dynamic> json) => CarritoDetalle(
-        carritoId: _toInt(json['carrito_id']),
-        sucursalId: _toInt(json['sucursal_id']),
-        sucursalNombre: _toString(json['sucursal_nombre']),
-        estado: _toString(json['estado']),
-        fechaCreacion: _toDateTime(json['fecha_creacion']),
-        fechaActualizacion: _toDateTime(json['fecha_actualizacion']),
-        items: _listaDe(json['items'], CarritoItem.fromJson),
-        cantidadTotalUnidades: _toInt(json['cantidad_total_unidades']),
-        subtotalCarrito: _toDouble(json['subtotal_carrito']),
-      );
+    carritoId: _toInt(json['carrito_id']),
+    sucursalId: _toInt(json['sucursal_id']),
+    sucursalNombre: _toString(json['sucursal_nombre']),
+    estado: _toString(json['estado']),
+    fechaCreacion: _toDateTime(json['fecha_creacion']),
+    fechaActualizacion: _toDateTime(json['fecha_actualizacion']),
+    items: _listaDe(json['items'], CarritoItem.fromJson),
+    cantidadTotalUnidades: _toInt(json['cantidad_total_unidades']),
+    subtotalCarrito: _toDouble(json['subtotal_carrito']),
+  );
 
   /// Detalle vacío: al eliminar un carrito el backend puede responder
   /// `204 No Content`, caso en el que no hay cuerpo que parsear.
   factory CarritoDetalle.vacio(int carritoId) => CarritoDetalle(
-        carritoId: carritoId,
-        sucursalId: 0,
-        sucursalNombre: '',
-        estado: '',
-        fechaCreacion: null,
-        fechaActualizacion: null,
-        items: const <CarritoItem>[],
-        cantidadTotalUnidades: 0,
-        subtotalCarrito: 0,
-      );
+    carritoId: carritoId,
+    sucursalId: 0,
+    sucursalNombre: '',
+    estado: '',
+    fechaCreacion: null,
+    fechaActualizacion: null,
+    items: const <CarritoItem>[],
+    cantidadTotalUnidades: 0,
+    subtotalCarrito: 0,
+  );
 
   final int carritoId;
   final int sucursalId;
@@ -306,5 +308,3 @@ DateTime? _toDateTime(Object? value) {
   if (texto.isEmpty) return null;
   return DateTime.tryParse(texto)?.toLocal();
 }
-
-

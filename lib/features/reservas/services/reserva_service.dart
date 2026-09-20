@@ -44,8 +44,8 @@ class ReservaException implements Exception {
 class ReservaService {
   /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
   ReservaService({AuthStorage? storage, http.Client? client})
-      : _storage = storage ?? AuthStorage(),
-        _client = client ?? http.Client();
+    : _storage = storage ?? AuthStorage(),
+      _client = client ?? http.Client();
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -64,7 +64,8 @@ class ReservaService {
       'La operación no pudo completarse. Actualiza la información e inténtalo nuevamente.';
   static const String _conflictStockMessage =
       'No fue posible reservar todas las prendas. Revisa nuevamente la disponibilidad.';
-  static const String _conflictCancelMessage = 'Esta reserva ya no puede cancelarse.';
+  static const String _conflictCancelMessage =
+      'Esta reserva ya no puede cancelarse.';
 
   final AuthStorage _storage;
   final http.Client _client;
@@ -131,9 +132,7 @@ class ReservaService {
       'PATCH',
       ApiConfig.reservaCancelarUrl(reservaId),
       mensajeConflicto: _conflictCancelMessage,
-      body: <String, dynamic>{
-        'observacion': _observacionOLimpiar(observacion),
-      },
+      body: <String, dynamic>{'observacion': _observacionOLimpiar(observacion)},
     );
     return _detalleDesde(data);
   }
@@ -296,5 +295,3 @@ class ReservaService {
     }
   }
 }
-
-

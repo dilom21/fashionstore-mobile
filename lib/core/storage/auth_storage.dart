@@ -8,7 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class AuthStorage {
   /// Crea el almacenamiento. Permite inyectar una instancia para pruebas.
   AuthStorage({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   /// Clave bajo la que se guarda el token de acceso.
   static const String tokenKey = 'vanter_access_token';

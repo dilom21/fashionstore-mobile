@@ -404,9 +404,9 @@ class _CampoTexto extends StatelessWidget {
   }
 
   OutlineInputBorder _borde(Color color) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: color),
-      );
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(color: color),
+  );
 }
 
 /// Botón principal con gradiente de acento lila/magenta.
@@ -479,6 +479,3 @@ class _BotonPrincipal extends StatelessWidget {
     );
   }
 }
-
-
-

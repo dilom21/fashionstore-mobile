@@ -239,11 +239,7 @@ class _AccionesCarrito extends StatelessWidget {
         if (constraints.maxWidth < 270) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              verCarrito,
-              const SizedBox(height: 10),
-              eliminar,
-            ],
+            children: [verCarrito, const SizedBox(height: 10), eliminar],
           );
         }
 
@@ -289,11 +285,8 @@ class _BotonEliminarCarrito extends StatelessWidget {
         side: const BorderSide(color: AppColors.border),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         minimumSize: const Size(0, 52),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
 }
-

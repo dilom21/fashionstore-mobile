@@ -150,14 +150,16 @@ class CatalogoService {
 
   /// Ejecuta un GET y decodifica el JSON con manejo de errores centralizado.
   Future<Object?> _get(String url, Map<String, String> query) async {
-    final Uri uri = Uri.parse(url).replace(
-      queryParameters: query.isEmpty ? null : query,
-    );
+    final Uri uri = Uri.parse(url)
+        .replace(queryParameters: query.isEmpty ? null : query);
 
     final http.Response response;
     try {
       response = await _client
-          .get(uri, headers: const <String, String>{'Accept': 'application/json'})
+          .get(
+            uri,
+            headers: const <String, String>{'Accept': 'application/json'},
+          )
           .timeout(_timeout);
     } on TimeoutException {
       throw const CatalogException(_connectionErrorMessage);

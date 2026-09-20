@@ -79,6 +79,47 @@ class ApiConfig {
   static String reservaCancelarUrl(int reservaId) =>
       '$baseUrl/reservas/$reservaId/cancelar';
 
+  // ---------------------------------------------------------------------------
+  // CU19 - Compra digital del CLIENTE (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint de creación de la venta digital (`POST`).
+  ///
+  /// Convierte un carrito ACTIVO en una venta PENDIENTE. El cliente solo envía
+  /// `carrito_id` y `canal`; el resto lo deriva el backend del carrito.
+  static String get ventasDigitalUrl => ventasDigitalUrlDesde(baseUrl);
+
+  /// Endpoint de creación de la venta digital para una URL base dada.
+  ///
+  /// Se parametriza para poder probar el servicio sin depender de
+  /// `--dart-define=API_BASE_URL`.
+  static String ventasDigitalUrlDesde(String base) => '$base/ventas/digital';
+
+  // ---------------------------------------------------------------------------
+  // CU22 - Pago electrónico del CLIENTE con Stripe (requiere JWT de cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint de creación/reutilización del PaymentIntent (`POST`).
+  ///
+  /// El cliente solo envía `venta_id`; el monto, la moneda y la metadata los
+  /// deriva el backend de la venta.
+  static String get stripeIntencionUrl => stripeIntencionUrlDesde(baseUrl);
+
+  /// Endpoint de creación de la intención para una URL base dada.
+  ///
+  /// Se parametriza para poder probar el servicio sin depender de
+  /// `--dart-define=API_BASE_URL`.
+  static String stripeIntencionUrlDesde(String base) =>
+      '$base/pagos/stripe/intencion';
+
+  /// Endpoint del estado backend de la venta y su pago electrónico (`GET`).
+  static String stripeEstadoVentaUrl(int ventaId) =>
+      stripeEstadoVentaUrlDesde(baseUrl, ventaId);
+
+  /// Endpoint de consulta de estado para una URL base dada.
+  static String stripeEstadoVentaUrlDesde(String base, int ventaId) =>
+      '$base/pagos/stripe/ventas/$ventaId/estado';
+
   /// Ayuda para desarrollo cuando falta configurar la URL base.
   static const String missingBaseUrlHint =
       'Falta configurar API_BASE_URL. Ejecuta la app con '

@@ -52,14 +52,16 @@ class _DisponibilidadSectionState extends State<DisponibilidadSection> {
   void initState() {
     super.initState();
     _service = widget.service ?? CatalogoService();
-    _filtros = widget.filtros ?? const CatalogoFiltros(
-      categorias: <OpcionFiltro>[],
-      tallas: <OpcionFiltro>[],
-      colores: <OpcionFiltro>[],
-      temporadas: <OpcionFiltro>[],
-      colecciones: <ColeccionFiltro>[],
-      sucursales: <SucursalFiltro>[],
-    );
+    _filtros =
+        widget.filtros ??
+        const CatalogoFiltros(
+          categorias: <OpcionFiltro>[],
+          tallas: <OpcionFiltro>[],
+          colores: <OpcionFiltro>[],
+          temporadas: <OpcionFiltro>[],
+          colecciones: <ColeccionFiltro>[],
+          sucursales: <SucursalFiltro>[],
+        );
     _cargar();
     if (widget.filtros == null) _cargarFiltros();
   }
@@ -93,14 +95,14 @@ class _DisponibilidadSectionState extends State<DisponibilidadSection> {
     });
 
     try {
-      final DisponibilidadProducto resultado =
-          await _service.obtenerDisponibilidad(
-        widget.productoId,
-        sucursalId: _sucursalId,
-        tallaId: _tallaId,
-        colorId: _colorId,
-        temporadaId: _temporadaId,
-      );
+      final DisponibilidadProducto resultado = await _service
+          .obtenerDisponibilidad(
+            widget.productoId,
+            sucursalId: _sucursalId,
+            tallaId: _tallaId,
+            colorId: _colorId,
+            temporadaId: _temporadaId,
+          );
       if (!mounted) return;
       setState(() {
         _disponibilidad = resultado;
@@ -124,24 +126,24 @@ class _DisponibilidadSectionState extends State<DisponibilidadSection> {
   Future<void> _abrirFiltros() async {
     final _FiltrosDisponibilidad? resultado =
         await showModalBottomSheet<_FiltrosDisponibilidad>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => _FiltrosDisponibilidadSheet(
-        filtros: _filtros,
-        tallas: widget.tallas,
-        colores: widget.colores,
-        seleccion: _FiltrosDisponibilidad(
-          sucursalId: _sucursalId,
-          tallaId: _tallaId,
-          colorId: _colorId,
-          temporadaId: _temporadaId,
-        ),
-      ),
-    );
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: AppColors.surface,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          builder: (_) => _FiltrosDisponibilidadSheet(
+            filtros: _filtros,
+            tallas: widget.tallas,
+            colores: widget.colores,
+            seleccion: _FiltrosDisponibilidad(
+              sucursalId: _sucursalId,
+              tallaId: _tallaId,
+              colorId: _colorId,
+              temporadaId: _temporadaId,
+            ),
+          ),
+        );
 
     if (resultado == null) return;
     setState(() {
@@ -174,9 +176,7 @@ class _DisponibilidadSectionState extends State<DisponibilidadSection> {
               onPressed: _cargandoFiltros ? null : _abrirFiltros,
               icon: const Icon(Icons.tune_rounded, size: 16),
               label: Text(
-                _filtrosActivos == 0
-                    ? 'Filtrar'
-                    : 'Filtrar ($_filtrosActivos)',
+                _filtrosActivos == 0 ? 'Filtrar' : 'Filtrar ($_filtrosActivos)',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               style: TextButton.styleFrom(
@@ -228,8 +228,10 @@ class _DisponibilidadSectionState extends State<DisponibilidadSection> {
 
     return Column(
       children: disponibilidad.sucursales
-          .map((DisponibilidadSucursal sucursal) =>
-              _SucursalDisponibilidad(sucursal: sucursal))
+          .map(
+            (DisponibilidadSucursal sucursal) =>
+                _SucursalDisponibilidad(sucursal: sucursal),
+          )
           .toList(),
     );
   }
@@ -352,8 +354,7 @@ class _VarianteDisponibilidad extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
-                color:
-                    conStock ? AppColors.textPrimary : AppColors.textMuted,
+                color: conStock ? AppColors.textPrimary : AppColors.textMuted,
               ),
             ),
           ),
@@ -527,8 +528,10 @@ class _FiltrosDisponibilidadSheetState
                       _Grupo(
                         titulo: 'Sucursal',
                         opciones: widget.filtros.sucursales
-                            .map((SucursalFiltro s) =>
-                                _Opcion(id: s.id, nombre: s.etiqueta))
+                            .map(
+                              (SucursalFiltro s) =>
+                                  _Opcion(id: s.id, nombre: s.etiqueta),
+                            )
                             .toList(),
                         seleccionado: _sucursalId,
                         onSeleccion: (id) => setState(() => _sucursalId = id),
@@ -536,8 +539,10 @@ class _FiltrosDisponibilidadSheetState
                       _Grupo(
                         titulo: 'Talla',
                         opciones: widget.tallas
-                            .map((OpcionVariante o) =>
-                                _Opcion(id: o.id, nombre: o.nombre))
+                            .map(
+                              (OpcionVariante o) =>
+                                  _Opcion(id: o.id, nombre: o.nombre),
+                            )
                             .toList(),
                         seleccionado: _tallaId,
                         onSeleccion: (id) => setState(() => _tallaId = id),
@@ -545,8 +550,10 @@ class _FiltrosDisponibilidadSheetState
                       _Grupo(
                         titulo: 'Color',
                         opciones: widget.colores
-                            .map((OpcionVariante o) =>
-                                _Opcion(id: o.id, nombre: o.nombre))
+                            .map(
+                              (OpcionVariante o) =>
+                                  _Opcion(id: o.id, nombre: o.nombre),
+                            )
                             .toList(),
                         seleccionado: _colorId,
                         onSeleccion: (id) => setState(() => _colorId = id),
@@ -554,8 +561,10 @@ class _FiltrosDisponibilidadSheetState
                       _Grupo(
                         titulo: 'Temporada',
                         opciones: widget.filtros.temporadas
-                            .map((OpcionFiltro o) =>
-                                _Opcion(id: o.id, nombre: o.nombre))
+                            .map(
+                              (OpcionFiltro o) =>
+                                  _Opcion(id: o.id, nombre: o.nombre),
+                            )
                             .toList(),
                         seleccionado: _temporadaId,
                         onSeleccion: (id) => setState(() => _temporadaId = id),

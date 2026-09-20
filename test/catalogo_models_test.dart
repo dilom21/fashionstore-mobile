@@ -85,15 +85,16 @@ void main() {
 
   group('ProductoDetalle', () {
     test('soporta recursos y variantes vacíos', () {
-      final ProductoDetalle detalle =
-          ProductoDetalle.fromJson(<String, dynamic>{
-        'id': 5,
-        'nombre': 'Chaqueta',
-        'precio': 200,
-        'recursos': <dynamic>[],
-        'variantes': <dynamic>[],
-        'categoria': <String, dynamic>{'id': 1, 'nombre': 'Chaquetas'},
-      });
+      final ProductoDetalle detalle = ProductoDetalle.fromJson(
+        <String, dynamic>{
+          'id': 5,
+          'nombre': 'Chaqueta',
+          'precio': 200,
+          'recursos': <dynamic>[],
+          'variantes': <dynamic>[],
+          'categoria': <String, dynamic>{'id': 1, 'nombre': 'Chaquetas'},
+        },
+      );
 
       expect(detalle.recursos, isEmpty);
       expect(detalle.variantes, isEmpty);
@@ -104,38 +105,39 @@ void main() {
     });
 
     test('recurso.color null y principal primero', () {
-      final ProductoDetalle detalle =
-          ProductoDetalle.fromJson(<String, dynamic>{
-        'id': 6,
-        'nombre': 'Polera',
-        'precio': 120,
-        'recursos': <dynamic>[
-          <String, dynamic>{
-            'id': 1,
-            'tipo': 'imagen',
-            'url': 'https://cdn.test/a.jpg',
-            'es_principal': false,
-            'color': null,
-          },
-          <String, dynamic>{
-            'id': 2,
-            'tipo': 'imagen',
-            'url': 'https://cdn.test/b.jpg',
-            'es_principal': true,
-            'color': <String, dynamic>{'id': 9, 'nombre': 'Azul'},
-          },
-        ],
-        'variantes': <dynamic>[
-          <String, dynamic>{
-            'id': 10,
-            'sku': 'SKU-1',
-            'estado': true,
-            'talla': <String, dynamic>{'id': 1, 'nombre': 'M'},
-            'color': <String, dynamic>{'id': 9, 'nombre': 'Azul'},
-          },
-        ],
-        'categoria': <String, dynamic>{'id': 1, 'nombre': 'Poleras'},
-      });
+      final ProductoDetalle detalle = ProductoDetalle.fromJson(
+        <String, dynamic>{
+          'id': 6,
+          'nombre': 'Polera',
+          'precio': 120,
+          'recursos': <dynamic>[
+            <String, dynamic>{
+              'id': 1,
+              'tipo': 'imagen',
+              'url': 'https://cdn.test/a.jpg',
+              'es_principal': false,
+              'color': null,
+            },
+            <String, dynamic>{
+              'id': 2,
+              'tipo': 'imagen',
+              'url': 'https://cdn.test/b.jpg',
+              'es_principal': true,
+              'color': <String, dynamic>{'id': 9, 'nombre': 'Azul'},
+            },
+          ],
+          'variantes': <dynamic>[
+            <String, dynamic>{
+              'id': 10,
+              'sku': 'SKU-1',
+              'estado': true,
+              'talla': <String, dynamic>{'id': 1, 'nombre': 'M'},
+              'color': <String, dynamic>{'id': 9, 'nombre': 'Azul'},
+            },
+          ],
+          'categoria': <String, dynamic>{'id': 1, 'nombre': 'Poleras'},
+        },
+      );
 
       expect(detalle.recursosUtilizables.length, 2);
       expect(detalle.recursoPrincipal?.id, 2);
@@ -147,63 +149,63 @@ void main() {
     });
 
     test('un solo recurso no falla y queda como principal', () {
-      final ProductoDetalle detalle =
-          ProductoDetalle.fromJson(<String, dynamic>{
-        'id': 7,
-        'nombre': 'Polo',
-        'precio': 149.90,
-        'recursos': <dynamic>[
-          <String, dynamic>{
-            'id': 1,
-            'tipo': 'imagen',
-            'url': 'https://cdn.test/model.webp',
-            'es_principal': true,
-            'color': null,
-          },
-        ],
-        'variantes': <dynamic>[],
-      });
+      final ProductoDetalle detalle = ProductoDetalle.fromJson(
+        <String, dynamic>{
+          'id': 7,
+          'nombre': 'Polo',
+          'precio': 149.90,
+          'recursos': <dynamic>[
+            <String, dynamic>{
+              'id': 1,
+              'tipo': 'imagen',
+              'url': 'https://cdn.test/model.webp',
+              'es_principal': true,
+              'color': null,
+            },
+          ],
+          'variantes': <dynamic>[],
+        },
+      );
 
       expect(detalle.recursosUtilizables.length, 1);
       expect(detalle.recursoPrincipal?.url, 'https://cdn.test/model.webp');
     });
 
     test('mantiene el orden del backend dentro de cada grupo', () {
-      final ProductoDetalle detalle =
-          ProductoDetalle.fromJson(<String, dynamic>{
-        'id': 8,
-        'nombre': 'Traje',
-        'precio': 500,
-        'recursos': <dynamic>[
-          <String, dynamic>{
-            'id': 10,
-            'tipo': 'imagen',
-            'url': 'https://cdn.test/sec-1.webp',
-            'es_principal': false,
-            'color': null,
-          },
-          <String, dynamic>{
-            'id': 11,
-            'tipo': 'imagen',
-            'url': 'https://cdn.test/principal.webp',
-            'es_principal': true,
-            'color': null,
-          },
-          <String, dynamic>{
-            'id': 12,
-            'tipo': 'imagen',
-            'url': 'https://cdn.test/sec-2.webp',
-            'es_principal': false,
-            'color': null,
-          },
-        ],
-        'variantes': <dynamic>[],
-      });
+      final ProductoDetalle detalle = ProductoDetalle.fromJson(
+        <String, dynamic>{
+          'id': 8,
+          'nombre': 'Traje',
+          'precio': 500,
+          'recursos': <dynamic>[
+            <String, dynamic>{
+              'id': 10,
+              'tipo': 'imagen',
+              'url': 'https://cdn.test/sec-1.webp',
+              'es_principal': false,
+              'color': null,
+            },
+            <String, dynamic>{
+              'id': 11,
+              'tipo': 'imagen',
+              'url': 'https://cdn.test/principal.webp',
+              'es_principal': true,
+              'color': null,
+            },
+            <String, dynamic>{
+              'id': 12,
+              'tipo': 'imagen',
+              'url': 'https://cdn.test/sec-2.webp',
+              'es_principal': false,
+              'color': null,
+            },
+          ],
+          'variantes': <dynamic>[],
+        },
+      );
 
       expect(
-        detalle.recursosUtilizables
-            .map((RecursoProducto r) => r.url)
-            .toList(),
+        detalle.recursosUtilizables.map((RecursoProducto r) => r.url).toList(),
         <String>[
           'https://cdn.test/principal.webp',
           'https://cdn.test/sec-1.webp',
@@ -213,51 +215,56 @@ void main() {
     });
 
     test('galería descarta recursos no visuales y sin URL', () {
-      final ProductoDetalle detalle =
-          ProductoDetalle.fromJson(<String, dynamic>{
-        'id': 9,
-        'nombre': 'Conjunto',
-        'precio': 300,
-        'recursos': <dynamic>[
-          <String, dynamic>{
-            'id': 1,
-            'tipo': 'video',
-            'url': 'https://cdn.test/video.mp4',
-            'es_principal': true,
-            'color': null,
-          },
-          <String, dynamic>{
-            'id': 2,
-            'tipo': 'imagen',
-            'url': '   ',
-            'es_principal': false,
-            'color': null,
-          },
-          <String, dynamic>{
-            'id': 3,
-            'tipo': 'galeria',
-            'url': 'https://cdn.test/foto.webp',
-            'es_principal': false,
-            'color': null,
-          },
-        ],
-        'variantes': <dynamic>[],
-      });
+      final ProductoDetalle detalle = ProductoDetalle.fromJson(
+        <String, dynamic>{
+          'id': 9,
+          'nombre': 'Conjunto',
+          'precio': 300,
+          'recursos': <dynamic>[
+            <String, dynamic>{
+              'id': 1,
+              'tipo': 'video',
+              'url': 'https://cdn.test/video.mp4',
+              'es_principal': true,
+              'color': null,
+            },
+            <String, dynamic>{
+              'id': 2,
+              'tipo': 'imagen',
+              'url': '   ',
+              'es_principal': false,
+              'color': null,
+            },
+            <String, dynamic>{
+              'id': 3,
+              'tipo': 'galeria',
+              'url': 'https://cdn.test/foto.webp',
+              'es_principal': false,
+              'color': null,
+            },
+          ],
+          'variantes': <dynamic>[],
+        },
+      );
 
       expect(detalle.recursosUtilizables.length, 1);
-      expect(detalle.recursosUtilizables.single.url, 'https://cdn.test/foto.webp');
+      expect(
+        detalle.recursosUtilizables.single.url,
+        'https://cdn.test/foto.webp',
+      );
     });
 
     test('detalle parsea imagen_principal_url', () {
-      final ProductoDetalle detalle =
-          ProductoDetalle.fromJson(<String, dynamic>{
-        'id': 10,
-        'nombre': 'Blazer',
-        'precio': 350,
-        'imagen_principal_url': 'https://cdn.test/general/model.webp',
-        'recursos': <dynamic>[],
-        'variantes': <dynamic>[],
-      });
+      final ProductoDetalle detalle = ProductoDetalle.fromJson(
+        <String, dynamic>{
+          'id': 10,
+          'nombre': 'Blazer',
+          'precio': 350,
+          'imagen_principal_url': 'https://cdn.test/general/model.webp',
+          'recursos': <dynamic>[],
+          'variantes': <dynamic>[],
+        },
+      );
 
       expect(detalle.imagenPrincipalUrl, 'https://cdn.test/general/model.webp');
     });
@@ -265,19 +272,20 @@ void main() {
 
   group('CatalogoFiltros', () {
     test('listas ausentes se vuelven vacías y ciudad null', () {
-      final CatalogoFiltros filtros =
-          CatalogoFiltros.fromJson(<String, dynamic>{
-        'categorias': <dynamic>[],
-        'tallas': <dynamic>[],
-        'colores': <dynamic>[],
-        'temporadas': <dynamic>[],
-        'colecciones': <dynamic>[
-          <String, dynamic>{'id': 1, 'nombre': 'Verano', 'temporada_id': 4},
-        ],
-        'sucursales': <dynamic>[
-          <String, dynamic>{'id': 2, 'nombre': 'Central', 'ciudad': null},
-        ],
-      });
+      final CatalogoFiltros filtros = CatalogoFiltros.fromJson(
+        <String, dynamic>{
+          'categorias': <dynamic>[],
+          'tallas': <dynamic>[],
+          'colores': <dynamic>[],
+          'temporadas': <dynamic>[],
+          'colecciones': <dynamic>[
+            <String, dynamic>{'id': 1, 'nombre': 'Verano', 'temporada_id': 4},
+          ],
+          'sucursales': <dynamic>[
+            <String, dynamic>{'id': 2, 'nombre': 'Central', 'ciudad': null},
+          ],
+        },
+      );
 
       expect(filtros.categorias, isEmpty);
       expect(filtros.sucursales.single.ciudad, isNull);
@@ -299,8 +307,9 @@ void main() {
       expect(seleccion.activos, 2);
       expect(seleccion.limpiar().estaVacio, isTrue);
 
-      final CatalogoFiltrosSeleccion sinCategoria =
-          seleccion.copyWith(categoriaId: null);
+      final CatalogoFiltrosSeleccion sinCategoria = seleccion.copyWith(
+        categoriaId: null,
+      );
       expect(sinCategoria.categoriaId, isNull);
       expect(sinCategoria.soloConStock, isTrue);
     });
@@ -310,47 +319,50 @@ void main() {
     test('parsea stock_disponible tal como llega y listas vacías', () {
       final DisponibilidadProducto disponibilidad =
           DisponibilidadProducto.fromJson(<String, dynamic>{
-        'producto_id': 7,
-        'producto': 'Camisa',
-        'sucursales': <dynamic>[
-          <String, dynamic>{
-            'sucursal_id': 1,
-            'sucursal': 'Central',
-            'variantes': <dynamic>[
+            'producto_id': 7,
+            'producto': 'Camisa',
+            'sucursales': <dynamic>[
               <String, dynamic>{
-                'variante_id': 11,
-                'sku': 'SKU-11',
-                'talla': 'L',
-                'color': 'Negro',
-                'temporada': 'Invierno',
-                'stock_disponible': 3,
-              },
-              <String, dynamic>{
-                'variante_id': 12,
-                'sku': 'SKU-12',
-                'talla': 'M',
-                'color': 'Negro',
-                'temporada': 'Invierno',
-                'stock_disponible': 0,
+                'sucursal_id': 1,
+                'sucursal': 'Central',
+                'variantes': <dynamic>[
+                  <String, dynamic>{
+                    'variante_id': 11,
+                    'sku': 'SKU-11',
+                    'talla': 'L',
+                    'color': 'Negro',
+                    'temporada': 'Invierno',
+                    'stock_disponible': 3,
+                  },
+                  <String, dynamic>{
+                    'variante_id': 12,
+                    'sku': 'SKU-12',
+                    'talla': 'M',
+                    'color': 'Negro',
+                    'temporada': 'Invierno',
+                    'stock_disponible': 0,
+                  },
+                ],
               },
             ],
-          },
-        ],
-      });
+          });
 
       expect(disponibilidad.estaVacio, isFalse);
       expect(disponibilidad.totalVariantesConStock, 1);
       expect(disponibilidad.sucursales.single.variantesConStock, 1);
-      expect(disponibilidad.sucursales.single.variantes.first.stockDisponible, 3);
+      expect(
+        disponibilidad.sucursales.single.variantes.first.stockDisponible,
+        3,
+      );
     });
 
     test('sin sucursales queda vacío', () {
       final DisponibilidadProducto disponibilidad =
           DisponibilidadProducto.fromJson(<String, dynamic>{
-        'producto_id': 8,
-        'producto': 'Camisa',
-        'sucursales': null,
-      });
+            'producto_id': 8,
+            'producto': 'Camisa',
+            'sucursales': null,
+          });
 
       expect(disponibilidad.estaVacio, isTrue);
       expect(disponibilidad.sucursales, isEmpty);

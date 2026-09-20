@@ -31,10 +31,8 @@ class CatalogoFiltrosSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => CatalogoFiltrosSheet(
-        filtros: filtros,
-        seleccion: seleccion,
-      ),
+      builder: (_) =>
+          CatalogoFiltrosSheet(filtros: filtros, seleccion: seleccion),
     );
   }
 
@@ -69,8 +67,9 @@ class _CatalogoFiltrosSheetState extends State<CatalogoFiltrosSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final List<ColeccionFiltro> colecciones =
-        widget.filtros.coleccionesDe(_seleccion.temporadaId);
+    final List<ColeccionFiltro> colecciones = widget.filtros.coleccionesDe(
+      _seleccion.temporadaId,
+    );
 
     return SafeArea(
       top: false,
@@ -133,22 +132,26 @@ class _CatalogoFiltrosSheetState extends State<CatalogoFiltrosSheet> {
                         titulo: 'Categoría',
                         opciones: widget.filtros.categorias,
                         seleccionado: _seleccion.categoriaId,
-                        onSeleccion: (id) => setState(() =>
-                            _seleccion = _seleccion.copyWith(categoriaId: id)),
+                        onSeleccion: (id) => setState(
+                          () =>
+                              _seleccion = _seleccion.copyWith(categoriaId: id),
+                        ),
                       ),
                       _GrupoOpciones(
                         titulo: 'Talla',
                         opciones: widget.filtros.tallas,
                         seleccionado: _seleccion.tallaId,
-                        onSeleccion: (id) => setState(() =>
-                            _seleccion = _seleccion.copyWith(tallaId: id)),
+                        onSeleccion: (id) => setState(
+                          () => _seleccion = _seleccion.copyWith(tallaId: id),
+                        ),
                       ),
                       _GrupoOpciones(
                         titulo: 'Color',
                         opciones: widget.filtros.colores,
                         seleccionado: _seleccion.colorId,
-                        onSeleccion: (id) => setState(() =>
-                            _seleccion = _seleccion.copyWith(colorId: id)),
+                        onSeleccion: (id) => setState(
+                          () => _seleccion = _seleccion.copyWith(colorId: id),
+                        ),
                       ),
                       _GrupoOpciones(
                         titulo: 'Temporada',
@@ -159,14 +162,18 @@ class _CatalogoFiltrosSheetState extends State<CatalogoFiltrosSheet> {
                       _GrupoColecciones(
                         colecciones: colecciones,
                         seleccionado: _seleccion.coleccionId,
-                        onSeleccion: (id) => setState(() =>
-                            _seleccion = _seleccion.copyWith(coleccionId: id)),
+                        onSeleccion: (id) => setState(
+                          () =>
+                              _seleccion = _seleccion.copyWith(coleccionId: id),
+                        ),
                       ),
                       _GrupoSucursales(
                         sucursales: widget.filtros.sucursales,
                         seleccionado: _seleccion.sucursalId,
-                        onSeleccion: (id) => setState(() =>
-                            _seleccion = _seleccion.copyWith(sucursalId: id)),
+                        onSeleccion: (id) => setState(
+                          () =>
+                              _seleccion = _seleccion.copyWith(sucursalId: id),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       SwitchListTile(
@@ -181,9 +188,11 @@ class _CatalogoFiltrosSheetState extends State<CatalogoFiltrosSheet> {
                           ),
                         ),
                         value: _seleccion.soloConStock,
-                        onChanged: (bool value) => setState(() =>
-                            _seleccion =
-                                _seleccion.copyWith(soloConStock: value)),
+                        onChanged: (bool value) => setState(
+                          () => _seleccion = _seleccion.copyWith(
+                            soloConStock: value,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -302,9 +311,8 @@ class _GrupoOpciones extends StatelessWidget {
                 (OpcionFiltro opcion) => _ChipFiltro(
                   label: opcion.nombre,
                   seleccionado: seleccionado == opcion.id,
-                  onTap: () => onSeleccion(
-                    seleccionado == opcion.id ? null : opcion.id,
-                  ),
+                  onTap: () =>
+                      onSeleccion(seleccionado == opcion.id ? null : opcion.id),
                 ),
               )
               .toList(),
@@ -426,8 +434,7 @@ class _ChipFiltro extends StatelessWidget {
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: seleccionado ? FontWeight.w700 : FontWeight.w500,
-              color:
-                  seleccionado ? AppColors.textPrimary : AppColors.textMuted,
+              color: seleccionado ? AppColors.textPrimary : AppColors.textMuted,
             ),
           ),
         ),

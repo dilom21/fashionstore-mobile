@@ -8,10 +8,8 @@
 class OpcionFiltro {
   const OpcionFiltro({required this.id, required this.nombre});
 
-  factory OpcionFiltro.fromJson(Map<String, dynamic> json) => OpcionFiltro(
-        id: _toInt(json['id']),
-        nombre: _toString(json['nombre']),
-      );
+  factory OpcionFiltro.fromJson(Map<String, dynamic> json) =>
+      OpcionFiltro(id: _toInt(json['id']), nombre: _toString(json['nombre']));
 
   final int id;
   final String nombre;
@@ -46,10 +44,10 @@ class SucursalFiltro {
   });
 
   factory SucursalFiltro.fromJson(Map<String, dynamic> json) => SucursalFiltro(
-        id: _toInt(json['id']),
-        nombre: _toString(json['nombre']),
-        ciudad: _toNullableString(json['ciudad']),
-      );
+    id: _toInt(json['id']),
+    nombre: _toString(json['nombre']),
+    ciudad: _toNullableString(json['ciudad']),
+  );
 
   final int id;
   final String nombre;
@@ -73,7 +71,8 @@ class CatalogoFiltros {
     required this.sucursales,
   });
 
-  factory CatalogoFiltros.fromJson(Map<String, dynamic> json) => CatalogoFiltros(
+  factory CatalogoFiltros.fromJson(Map<String, dynamic> json) =>
+      CatalogoFiltros(
         categorias: _listaDe(json['categorias'], OpcionFiltro.fromJson),
         tallas: _listaDe(json['tallas'], OpcionFiltro.fromJson),
         colores: _listaDe(json['colores'], OpcionFiltro.fromJson),
@@ -93,8 +92,9 @@ class CatalogoFiltros {
   List<ColeccionFiltro> coleccionesDe(int? temporadaId) {
     if (temporadaId == null) return colecciones;
     return colecciones
-        .where((ColeccionFiltro coleccion) =>
-            coleccion.temporadaId == temporadaId)
+        .where(
+          (ColeccionFiltro coleccion) => coleccion.temporadaId == temporadaId,
+        )
         .toList();
   }
 
@@ -102,8 +102,10 @@ class CatalogoFiltros {
   bool coleccionCompatible(int? coleccionId, int? temporadaId) {
     if (coleccionId == null) return true;
     if (temporadaId == null) return true;
-    return colecciones.any((ColeccionFiltro coleccion) =>
-        coleccion.id == coleccionId && coleccion.temporadaId == temporadaId);
+    return colecciones.any(
+      (ColeccionFiltro coleccion) =>
+          coleccion.id == coleccionId && coleccion.temporadaId == temporadaId,
+    );
   }
 
   String nombreOpcion(List<OpcionFiltro> opciones, int? id) {
@@ -167,10 +169,8 @@ class CatalogoFiltrosSeleccion {
       categoriaId: identical(categoriaId, _sinCambio)
           ? this.categoriaId
           : categoriaId as int?,
-      tallaId:
-          identical(tallaId, _sinCambio) ? this.tallaId : tallaId as int?,
-      colorId:
-          identical(colorId, _sinCambio) ? this.colorId : colorId as int?,
+      tallaId: identical(tallaId, _sinCambio) ? this.tallaId : tallaId as int?,
+      colorId: identical(colorId, _sinCambio) ? this.colorId : colorId as int?,
       temporadaId: identical(temporadaId, _sinCambio)
           ? this.temporadaId
           : temporadaId as int?,

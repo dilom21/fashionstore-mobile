@@ -74,21 +74,21 @@ class ReservaItem {
   });
 
   factory ReservaItem.fromJson(Map<String, dynamic> json) => ReservaItem(
-        detalleId: _toInt(json['detalle_id']),
-        inventarioId: _toInt(json['inventario_id']),
-        productoId: _toInt(json['producto_id']),
-        productoNombre: _toString(json['producto_nombre']),
-        imagenPrincipal: _toNullableString(json['imagen_principal']),
-        varianteProductoId: _toNullableInt(json['variante_producto_id']),
-        sku: _toString(json['sku']),
-        tallaId: _toNullableInt(json['talla_id']),
-        tallaNombre: _toString(json['talla_nombre']),
-        colorId: _toNullableInt(json['color_id']),
-        colorNombre: _toString(json['color_nombre']),
-        temporadaId: _toNullableInt(json['temporada_id']),
-        temporadaNombre: _toString(json['temporada_nombre']),
-        cantidad: _toInt(json['cantidad']),
-      );
+    detalleId: _toInt(json['detalle_id']),
+    inventarioId: _toInt(json['inventario_id']),
+    productoId: _toInt(json['producto_id']),
+    productoNombre: _toString(json['producto_nombre']),
+    imagenPrincipal: _toNullableString(json['imagen_principal']),
+    varianteProductoId: _toNullableInt(json['variante_producto_id']),
+    sku: _toString(json['sku']),
+    tallaId: _toNullableInt(json['talla_id']),
+    tallaNombre: _toString(json['talla_nombre']),
+    colorId: _toNullableInt(json['color_id']),
+    colorNombre: _toString(json['color_nombre']),
+    temporadaId: _toNullableInt(json['temporada_id']),
+    temporadaNombre: _toString(json['temporada_nombre']),
+    cantidad: _toInt(json['cantidad']),
+  );
 
   final int detalleId;
   final int inventarioId;
@@ -126,18 +126,18 @@ class ReservaDetalle {
   });
 
   factory ReservaDetalle.fromJson(Map<String, dynamic> json) => ReservaDetalle(
-        reservaId: _toInt(json['reserva_id']),
-        carritoId: _toInt(json['carrito_id']),
-        clienteId: _toInt(json['cliente_id']),
-        sucursalId: _toInt(json['sucursal_id']),
-        sucursalNombre: _toString(json['sucursal_nombre']),
-        fechaReserva: _toDateTime(json['fecha_reserva']),
-        fechaAtencion: _toDateTime(json['fecha_atencion']),
-        estado: _toString(json['estado']),
-        observacion: _toNullableString(json['observacion']),
-        items: _listaDe(json['items'], ReservaItem.fromJson),
-        cantidadTotalUnidades: _toInt(json['cantidad_total_unidades']),
-      );
+    reservaId: _toInt(json['reserva_id']),
+    carritoId: _toInt(json['carrito_id']),
+    clienteId: _toInt(json['cliente_id']),
+    sucursalId: _toInt(json['sucursal_id']),
+    sucursalNombre: _toString(json['sucursal_nombre']),
+    fechaReserva: _toDateTime(json['fecha_reserva']),
+    fechaAtencion: _toDateTime(json['fecha_atencion']),
+    estado: _toString(json['estado']),
+    observacion: _toNullableString(json['observacion']),
+    items: _listaDe(json['items'], ReservaItem.fromJson),
+    cantidadTotalUnidades: _toInt(json['cantidad_total_unidades']),
+  );
 
   final int reservaId;
   final int carritoId;
@@ -188,18 +188,18 @@ class ReservaResumen {
   });
 
   factory ReservaResumen.fromJson(Map<String, dynamic> json) => ReservaResumen(
-        reservaId: _toInt(json['reserva_id']),
-        carritoId: _toInt(json['carrito_id']),
-        clienteId: _toInt(json['cliente_id']),
-        sucursalId: _toInt(json['sucursal_id']),
-        sucursalNombre: _toString(json['sucursal_nombre']),
-        fechaReserva: _toDateTime(json['fecha_reserva']),
-        fechaAtencion: _toDateTime(json['fecha_atencion']),
-        estado: _toString(json['estado']),
-        observacion: _toNullableString(json['observacion']),
-        cantidadLineas: _toInt(json['cantidad_lineas']),
-        cantidadUnidades: _toInt(json['cantidad_unidades']),
-      );
+    reservaId: _toInt(json['reserva_id']),
+    carritoId: _toInt(json['carrito_id']),
+    clienteId: _toInt(json['cliente_id']),
+    sucursalId: _toInt(json['sucursal_id']),
+    sucursalNombre: _toString(json['sucursal_nombre']),
+    fechaReserva: _toDateTime(json['fecha_reserva']),
+    fechaAtencion: _toDateTime(json['fecha_atencion']),
+    estado: _toString(json['estado']),
+    observacion: _toNullableString(json['observacion']),
+    cantidadLineas: _toInt(json['cantidad_lineas']),
+    cantidadUnidades: _toInt(json['cantidad_unidades']),
+  );
 
   final int reservaId;
   final int carritoId;
@@ -309,5 +309,3 @@ DateTime? _toDateTime(Object? value) {
   if (texto.isEmpty) return null;
   return DateTime.tryParse(texto)?.toLocal();
 }
-
-

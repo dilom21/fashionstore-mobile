@@ -24,7 +24,7 @@ class CarritoResumenCard extends StatelessWidget {
   /// Carrito resumido (detalle real del backend).
   final CarritoDetalle carrito;
 
-  /// Acción principal: ir a pagar (CU15 no implementa pago todavía).
+  /// Acción principal: ir a pagar (CU19 abre el checkout digital).
   final VoidCallback onIrAPagar;
 
   /// Acción secundaria: seguir explorando el catálogo.
@@ -88,10 +88,7 @@ class CarritoResumenCard extends StatelessWidget {
             valor: '${carrito.cantidadLineas}',
           ),
           const SizedBox(height: 10),
-          _FilaResumen(
-            etiqueta: 'Sucursal',
-            valor: carrito.sucursalEtiqueta,
-          ),
+          _FilaResumen(etiqueta: 'Sucursal', valor: carrito.sucursalEtiqueta),
           const SizedBox(height: 16),
           const Divider(color: AppColors.border, height: 1),
           const SizedBox(height: 16),

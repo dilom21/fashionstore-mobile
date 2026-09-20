@@ -14,9 +14,9 @@ class LoginRequest {
   final String password;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'correo': correo,
-        'password': password,
-      };
+    'correo': correo,
+    'password': password,
+  };
 }
 
 /// Identidad del usuario autenticado devuelta por `GET /auth/me`.
@@ -29,11 +29,11 @@ class UsuarioAuth {
   });
 
   factory UsuarioAuth.fromJson(Map<String, dynamic> json) => UsuarioAuth(
-        id: _toInt(json['id']),
-        correo: _toString(json['correo']),
-        rol: _toString(json['rol']),
-        contexto: _toString(json['contexto']),
-      );
+    id: _toInt(json['id']),
+    correo: _toString(json['correo']),
+    rol: _toString(json['rol']),
+    contexto: _toString(json['contexto']),
+  );
 
   final int id;
   final String correo;
@@ -41,11 +41,11 @@ class UsuarioAuth {
   final String contexto;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'correo': correo,
-        'rol': rol,
-        'contexto': contexto,
-      };
+    'id': id,
+    'correo': correo,
+    'rol': rol,
+    'contexto': contexto,
+  };
 }
 
 /// Datos del cliente autenticado devueltos por `POST /auth/clientes/login`.
@@ -61,14 +61,14 @@ class ClienteAuth {
   });
 
   factory ClienteAuth.fromJson(Map<String, dynamic> json) => ClienteAuth(
-        id: _toInt(json['id']),
-        correo: _toString(json['correo']),
-        rol: _toString(json['rol']),
-        contexto: _toString(json['contexto']),
-        clienteId: _toNullableInt(json['cliente_id']),
-        nombre: _toString(json['nombre']),
-        apellido: _toString(json['apellido']),
-      );
+    id: _toInt(json['id']),
+    correo: _toString(json['correo']),
+    rol: _toString(json['rol']),
+    contexto: _toString(json['contexto']),
+    clienteId: _toNullableInt(json['cliente_id']),
+    nombre: _toString(json['nombre']),
+    apellido: _toString(json['apellido']),
+  );
 
   final int id;
   final String correo;
@@ -82,14 +82,14 @@ class ClienteAuth {
   String get nombreCompleto => '$nombre $apellido'.trim();
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'correo': correo,
-        'rol': rol,
-        'contexto': contexto,
-        'cliente_id': clienteId,
-        'nombre': nombre,
-        'apellido': apellido,
-      };
+    'id': id,
+    'correo': correo,
+    'rol': rol,
+    'contexto': contexto,
+    'cliente_id': clienteId,
+    'nombre': nombre,
+    'apellido': apellido,
+  };
 }
 
 /// Respuesta de `POST /auth/clientes/login`.
@@ -112,10 +112,10 @@ class ClienteLoginResponse {
   final ClienteAuth usuario;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'access_token': accessToken,
-        'token_type': tokenType,
-        'usuario': usuario.toJson(),
-      };
+    'access_token': accessToken,
+    'token_type': tokenType,
+    'usuario': usuario.toJson(),
+  };
 }
 
 int _toInt(Object? value) {

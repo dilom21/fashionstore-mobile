@@ -15,7 +15,10 @@ class DisponibilidadProducto {
       DisponibilidadProducto(
         productoId: _toInt(json['producto_id']),
         producto: _toString(json['producto']),
-        sucursales: _listaDe(json['sucursales'], DisponibilidadSucursal.fromJson),
+        sucursales: _listaDe(
+          json['sucursales'],
+          DisponibilidadSucursal.fromJson,
+        ),
       );
 
   final int productoId;
@@ -27,8 +30,9 @@ class DisponibilidadProducto {
     int total = 0;
     for (final DisponibilidadSucursal sucursal in sucursales) {
       total += sucursal.variantes
-          .where((DisponibilidadVariante variante) =>
-              variante.stockDisponible > 0)
+          .where(
+            (DisponibilidadVariante variante) => variante.stockDisponible > 0,
+          )
           .length;
     }
     return total;
@@ -49,10 +53,7 @@ class DisponibilidadSucursal {
       DisponibilidadSucursal(
         sucursalId: _toInt(json['sucursal_id']),
         sucursal: _toString(json['sucursal']),
-        variantes: _listaDe(
-          json['variantes'],
-          DisponibilidadVariante.fromJson,
-        ),
+        variantes: _listaDe(json['variantes'], DisponibilidadVariante.fromJson),
       );
 
   final int sucursalId;

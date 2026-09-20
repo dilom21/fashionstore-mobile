@@ -94,21 +94,22 @@ void main() {
   });
 
   test('ReservaListaResponse usa total_reservas del backend', () {
-    final ReservaListaResponse lista =
-        ReservaListaResponse.fromJson(<String, dynamic>{
-      'items': <dynamic>[
-        <String, dynamic>{
-          'reserva_id': 5,
-          'sucursal_nombre': 'Ventura',
-          'estado': 'CONFIRMADA',
-          'cantidad_lineas': 2,
-          'cantidad_unidades': 3,
-          'observacion': 'Llamar antes',
-          'fecha_atencion': '2026-10-01T09:15:00',
-        },
-      ],
-      'total_reservas': 1,
-    });
+    final ReservaListaResponse lista = ReservaListaResponse.fromJson(
+      <String, dynamic>{
+        'items': <dynamic>[
+          <String, dynamic>{
+            'reserva_id': 5,
+            'sucursal_nombre': 'Ventura',
+            'estado': 'CONFIRMADA',
+            'cantidad_lineas': 2,
+            'cantidad_unidades': 3,
+            'observacion': 'Llamar antes',
+            'fecha_atencion': '2026-10-01T09:15:00',
+          },
+        ],
+        'total_reservas': 1,
+      },
+    );
 
     expect(lista.totalReservas, 1);
     expect(lista.estaVacio, isFalse);

@@ -106,13 +106,7 @@ class _CrearReservaPageState extends State<CrearReservaPage> {
     final DateTime? fecha = _fecha;
     final TimeOfDay? hora = _hora;
     if (fecha == null || hora == null) return null;
-    return DateTime(
-      fecha.year,
-      fecha.month,
-      fecha.day,
-      hora.hour,
-      hora.minute,
-    );
+    return DateTime(fecha.year, fecha.month, fecha.day, hora.hour, hora.minute);
   }
 
   /// La fecha/hora debe ser futura. El backend sigue siendo la autoridad final.
@@ -798,9 +792,9 @@ String _textoHora(TimeOfDay hora) =>
 
 /// Borde redondeado de los campos de texto.
 OutlineInputBorder _bordeInput(Color color) => OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: color),
-    );
+  borderRadius: BorderRadius.circular(14),
+  borderSide: BorderSide(color: color),
+);
 
 /// Estado de error con opción de reintentar.
 class _EstadoError extends StatelessWidget {
@@ -855,9 +849,3 @@ class _EstadoError extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-

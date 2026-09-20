@@ -145,21 +145,22 @@ class ProductImage extends StatelessWidget {
             limpia,
             fit: fit,
             semanticLabel: etiqueta.isEmpty ? null : etiqueta,
-            loadingBuilder: (
-              BuildContext context,
-              Widget child,
-              ImageChunkEvent? progress,
-            ) {
-              if (progress == null) return child;
-              return _CargandoImagen(compact: compactFallback);
-            },
+            loadingBuilder:
+                (
+                  BuildContext context,
+                  Widget child,
+                  ImageChunkEvent? progress,
+                ) {
+                  if (progress == null) return child;
+                  return _CargandoImagen(compact: compactFallback);
+                },
             errorBuilder:
                 (BuildContext context, Object error, StackTrace? stack) =>
                     _FallbackConSemantica(
-              nombre: etiqueta,
-              compact: compactFallback,
-              etiqueta: etiqueta,
-            ),
+                      nombre: etiqueta,
+                      compact: compactFallback,
+                      etiqueta: etiqueta,
+                    ),
           );
 
     final Widget recortado = borderRadius == BorderRadius.zero
@@ -298,10 +299,7 @@ class _ProductoMediaState extends State<ProductoMedia> {
     final String nombre = widget.nombre?.trim() ?? '';
 
     if (recursos.isEmpty) {
-      return const AspectRatio(
-        aspectRatio: 4 / 5,
-        child: VanterFallback(),
-      );
+      return const AspectRatio(aspectRatio: 4 / 5, child: VanterFallback());
     }
 
     final int total = recursos.length;
