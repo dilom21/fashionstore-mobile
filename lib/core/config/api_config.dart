@@ -65,6 +65,21 @@ class ApiConfig {
       '$baseUrl/carritos/$carritoId/items/$detalleId';
 
   // ---------------------------------------------------------------------------
+  // Asistencia Inteligente (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint de recomendaciones basadas en el catálogo e inventario reales.
+  ///
+  /// La IA (OpenAI/DeepSeek) solo selecciona/rankea candidatos reales: la app
+  /// nunca envía ni recibe claves de IA. La `API key` vive solo en el backend.
+  static String get asistenciaRecomendacionesUrl =>
+      asistenciaRecomendacionesUrlDesde(baseUrl);
+
+  /// Endpoint de recomendaciones para una URL base dada (inyección en pruebas).
+  static String asistenciaRecomendacionesUrlDesde(String base) =>
+      '$base/asistencia-inteligente/recomendaciones';
+
+  // ---------------------------------------------------------------------------
   // CU16 - Reserva de prendas del CLIENTE (requiere JWT de contexto cliente)
   // ---------------------------------------------------------------------------
 
