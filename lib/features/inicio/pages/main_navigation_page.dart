@@ -38,7 +38,12 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
 
   /// Secciones de la navegación inferior (Inicio es la inicial).
   late final List<Widget> _secciones = <Widget>[
-    const InicioPage(),
+    InicioPage(
+      onExplorarCatalogo: () => _irATab(_tabCatalogo),
+      onVerCarrito: () => _irATab(_tabCarrito),
+      onVerReservas: _abrirReservas,
+      onVerCompras: _abrirHistorialCompras,
+    ),
     const CatalogoPage(),
     const _VestidorPlaceholderPage(),
     CarritosPage(
@@ -58,6 +63,24 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     if (index == _tabCarrito) {
       _carritoKey.currentState?.recargar();
     }
+  }
+
+  /// Abre el historial de reservas reutilizando la pantalla existente (CU16).
+  void _abrirReservas() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReservasPage(onVerCarrito: () => _irATab(_tabCarrito)),
+      ),
+    );
+  }
+
+  /// Abre el historial de compras reutilizando la pantalla existente (CU24).
+  void _abrirHistorialCompras() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const HistorialComprasPage(),
+      ),
+    );
   }
 
   @override

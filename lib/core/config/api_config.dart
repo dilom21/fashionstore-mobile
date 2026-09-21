@@ -25,6 +25,12 @@ class ApiConfig {
   /// personal (`/auth/personal/login`).
   static String get clientesLoginUrl => '$baseUrl/auth/clientes/login';
 
+  /// Endpoint PÚBLICO de registro de cuenta de CLIENTE (no requiere JWT).
+  ///
+  /// Devuelve 201 con la cuenta creada y **sin** token: el cliente inicia
+  /// sesión después con [clientesLoginUrl].
+  static String get clientesRegistroUrl => '$baseUrl/auth/clientes/registro';
+
   /// Endpoint para obtener el usuario autenticado actual.
   static String get authMeUrl => '$baseUrl/auth/me';
 

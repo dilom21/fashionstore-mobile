@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -25,6 +26,7 @@ class AuthException implements Exception {
 /// Flujo: Page -> Service -> Backend FastAPI.
 /// Consume únicamente endpoints de cliente:
 ///   POST /auth/clientes/login
+///   POST /auth/clientes/registro (público, no emite token)
 ///   GET  /auth/me
 ///
 /// Nunca usa `POST /auth/personal/login` (personal interno del sistema web).
@@ -44,6 +46,16 @@ class AuthService {
       'Correo o contraseña incorrectos.';
   static const String _invalidSessionMessage =
       'No pudimos iniciar sesión. Verifica tus datos.';
+  static const String _registroCorreoDuplicadoMessage =
+      'Ya existe una cuenta registrada con este correo.';
+  static const String _registroDocumentoDuplicadoMessage =
+      'Ya existe un cliente registrado con este documento.';
+  static const String _registroPasswordsMessage =
+      'Las contraseñas no coinciden.';
+  static const String _registroDatosMessage =
+      'Revisa los datos ingresados e inténtalo nuevamente.';
+  static const String _registroServidorMessage =
+      'No pudimos crear tu cuenta. Inténtalo nuevamente.';
 
   final AuthStorage _storage;
   final http.Client _client;
@@ -101,6 +113,100 @@ class AuthService {
     }
 
     throw const AuthException(_unexpectedErrorMessage);
+  }
+
+  /// Registra una cuenta de CLIENTE (`POST /auth/clientes/registro`).
+  ///
+  /// Endpoint PÚBLICO: no envía `Authorization` ni requiere sesión. La
+  /// respuesta 201 NO incluye `access_token`, por lo que este método **no**
+  /// guarda nada en `AuthStorage` ni inicia sesión: el cliente debe iniciar
+  /// sesión después con [loginCliente].
+  Future<ClienteRegistroResponse> registrarCliente(
+    ClienteRegistroRequest request,
+  ) async {
+    _asegurarConfiguracion();
+
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse(ApiConfig.clientesRegistroUrl),
+            headers: const <String, String>{
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(request.toJson()),
+          )
+          .timeout(_timeout);
+    } on TimeoutException {
+      throw const AuthException(_connectionErrorMessage);
+    } on http.ClientException {
+      throw const AuthException(_connectionErrorMessage);
+    } catch (_) {
+      throw const AuthException(_connectionErrorMessage);
+    }
+
+    if (response.statusCode == 201) {
+      try {
+        return ClienteRegistroResponse.fromJson(
+          jsonDecode(response.body) as Map<String, dynamic>,
+        );
+      } catch (_) {
+        throw const AuthException(_unexpectedErrorMessage);
+      }
+    }
+
+    throw _errorRegistro(response);
+  }
+
+  /// Traduce el error del registro a un mensaje apto para el cliente.
+  ///
+  /// El backend documenta: 409 correo o CI duplicado; 422 contraseña insegura,
+  /// contraseñas distintas, sexo inválido, fecha futura o datos inválidos.
+  AuthException _errorRegistro(http.Response response) {
+    final String detail = _leerDetail(response.body);
+    final String detalle = detail.toLowerCase();
+
+    switch (response.statusCode) {
+      case 409:
+        if (detalle.contains('documento') || detalle.contains(' ci')) {
+          return const AuthException(_registroDocumentoDuplicadoMessage);
+        }
+        return const AuthException(_registroCorreoDuplicadoMessage);
+      case 422:
+        if (detalle.contains('no coinciden')) {
+          return const AuthException(_registroPasswordsMessage);
+        }
+        if (detail.isNotEmpty && detalle.contains('contrase')) {
+          // Política de contraseña: el texto controlado es del backend.
+          return AuthException(detail);
+        }
+        return const AuthException(_registroDatosMessage);
+      default:
+        return const AuthException(_registroServidorMessage);
+    }
+  }
+
+  /// Lee `detail` del JSON de FastAPI de forma defensiva.
+  ///
+  /// Devuelve cadena vacía si el cuerpo no es JSON o no trae `detail`, para no
+  /// exponer nunca JSON crudo, stacktraces ni errores técnicos.
+  String _leerDetail(String body) {
+    try {
+      final Object? data = jsonDecode(body);
+      if (data is! Map) return '';
+      final Object? detail = data['detail'];
+      if (detail is String) return detail.trim();
+      if (detail is List && detail.isNotEmpty) {
+        final Object? primero = detail.first;
+        if (primero is Map && primero['msg'] is String) {
+          return (primero['msg'] as String).trim();
+        }
+      }
+    } catch (_) {
+      // Cuerpo no JSON: se ignora y se usa el mensaje por defecto.
+    }
+    return '';
   }
 
   /// Obtiene el usuario autenticado usando el token guardado.
