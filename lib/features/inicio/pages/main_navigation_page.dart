@@ -6,6 +6,7 @@ import '../../autenticacion_seguridad/services/auth_service.dart';
 import '../../carrito/pages/carritos_page.dart';
 import '../../catalogo/pages/catalogo_page.dart';
 import '../../reservas/pages/reservas_page.dart';
+import '../../vestidor_virtual/pages/vestidor_virtual_page.dart';
 import 'inicio_page.dart';
 
 /// Contenedor principal del CLIENTE autenticado.
@@ -39,7 +40,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   late final List<Widget> _secciones = <Widget>[
     const InicioPage(),
     const CatalogoPage(),
-    const _VestidorPlaceholderPage(),
+    const VestidorVirtualPage(),
     CarritosPage(
       key: _carritoKey,
       onExplorarCatalogo: () => _irATab(_tabCatalogo),
@@ -121,103 +122,6 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     );
   }
 }
-/// Pantalla temporal reutilizable para secciones aún no implementadas.
-class _SeccionProximamente extends StatelessWidget {
-  const _SeccionProximamente({
-    required this.title,
-    required this.icon,
-    required this.message,
-  });
-
-  final String title;
-  final IconData icon;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 2,
-          ),
-        ),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  height: 76,
-                  width: 76,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Icon(icon, color: AppColors.primary, size: 32),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.5,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: const Text(
-                    'Disponible próximamente.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      letterSpacing: 0.4,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Opción táctil del perfil.
 class _OpcionPerfil extends StatelessWidget {
   const _OpcionPerfil({
@@ -296,19 +200,6 @@ class _OpcionPerfil extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Placeholder del Vestidor Virtual (futuro acceso a la cámara).
-class _VestidorPlaceholderPage extends StatelessWidget {
-  const _VestidorPlaceholderPage();
-
-  @override
-  Widget build(BuildContext context) => const _SeccionProximamente(
-        title: 'Vestidor Virtual',
-        icon: Icons.camera_alt_rounded,
-        message: 'Próximamente podrás probar nuevas experiencias utilizando '
-            'la cámara de tu dispositivo.',
-      );
 }
 
 /// Perfil del cliente.

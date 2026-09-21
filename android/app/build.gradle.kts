@@ -47,3 +47,20 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // CU26 - Vestidor Virtual (Etapa 2A): MediaPipe Tasks Vision permite crear
+    // el PoseLandmarker que carga `pose_landmarker_lite.task` desde assets.
+    // Se fija la versión estable actual (es la que resuelve `latest.release`
+    // hoy) para que la compilación sea reproducible y no dependa de la red.
+    implementation("com.google.mediapipe:tasks-vision:1.0.0")
+
+    // CU26 - Vestidor Virtual (Etapa 2B): CameraX nativo para la vista de
+    // cámara (PreviewView + PlatformView). Una única versión estable para las
+    // cuatro dependencias; sin versiones dinámicas.
+    val cameraXVersion = "1.6.2"
+    implementation("androidx.camera:camera-core:$cameraXVersion")
+    implementation("androidx.camera:camera-camera2:$cameraXVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
+    implementation("androidx.camera:camera-view:$cameraXVersion")
+}
