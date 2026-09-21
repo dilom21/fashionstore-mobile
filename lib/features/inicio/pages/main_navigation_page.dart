@@ -6,6 +6,7 @@ import '../../autenticacion_seguridad/services/auth_service.dart';
 import '../../carrito/pages/carritos_page.dart';
 import '../../catalogo/pages/catalogo_page.dart';
 import '../../reservas/pages/reservas_page.dart';
+import '../../ventas/pages/historial_compras_page.dart';
 import 'inicio_page.dart';
 
 /// Contenedor principal del CLIENTE autenticado.
@@ -353,6 +354,15 @@ class _PerfilPlaceholderPageState extends State<_PerfilPlaceholderPage> {
     );
   }
 
+  /// CU24 – Abre el historial de compras del cliente autenticado.
+  void _abrirHistorialCompras() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const HistorialComprasPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -439,6 +449,14 @@ class _PerfilPlaceholderPageState extends State<_PerfilPlaceholderPage> {
                   titulo: 'Mis reservas',
                   subtitulo: 'Consulta y administra tus reservas de prendas.',
                   onTap: _abrirReservas,
+                ),
+                const SizedBox(height: 12),
+                _OpcionPerfil(
+                  icon: Icons.receipt_long_rounded,
+                  titulo: 'Mis compras',
+                  subtitulo:
+                      'Consulta tu historial y los detalles de tus compras.',
+                  onTap: _abrirHistorialCompras,
                 ),
                 const SizedBox(height: 28),
                 OutlinedButton.icon(

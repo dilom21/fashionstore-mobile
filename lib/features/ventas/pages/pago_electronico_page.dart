@@ -8,6 +8,7 @@ import '../payments/flutter_stripe_payment_gateway.dart';
 import '../payments/stripe_config.dart';
 import '../payments/stripe_payment_gateway.dart';
 import '../services/pago_electronico_service.dart';
+import 'comprobante_venta_page.dart';
 
 /// CU22 – Pago electrónico de una venta digital PENDIENTE (Stripe PaymentSheet).
 ///
@@ -309,6 +310,20 @@ class _PagoElectronicoPageState extends State<PagoElectronicoPage> {
     Navigator.of(context).pop(_exito);
   }
 
+  /// CU23: abre el comprobante de la venta ya confirmada (solo lectura).
+  ///
+  /// NO cambia `_exito` ni el resultado del pago: al volver, esta pantalla sigue
+  /// mostrando "Compra completada" y VOLVER AL INICIO devuelve `true` al
+  /// checkout, que abandona el carrito CONVERTIDO.
+  Future<void> _verComprobante() async {
+    if (_procesando || _confirmando) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ComprobanteVentaPage(ventaId: widget.ventaId),
+      ),
+    );
+  }
+
   void _mostrarMensaje(String mensaje) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -374,6 +389,7 @@ class _PagoElectronicoPageState extends State<PagoElectronicoPage> {
       return _EstadoExito(
         ventaId: widget.ventaId,
         montoTexto: _montoTexto,
+        onVerComprobante: _verComprobante,
         onVolver: _volverAlInicio,
       );
     }
@@ -670,11 +686,15 @@ class _EstadoExito extends StatelessWidget {
   const _EstadoExito({
     required this.ventaId,
     required this.montoTexto,
+    required this.onVerComprobante,
     required this.onVolver,
   });
 
   final int ventaId;
   final String montoTexto;
+
+  /// CU23: acción principal, abre el comprobante de la venta confirmada.
+  final VoidCallback onVerComprobante;
   final VoidCallback onVolver;
 
   @override
@@ -709,9 +729,25 @@ class _EstadoExito extends StatelessWidget {
       ),
       acciones: [
         BotonGradiente(
-          label: 'VOLVER AL INICIO',
-          icon: Icons.home_rounded,
+          label: 'VER COMPROBANTE',
+          icon: Icons.receipt_long_rounded,
+          onPressed: onVerComprobante,
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(
           onPressed: onVolver,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.textPrimary,
+            side: const BorderSide(color: AppColors.border),
+            minimumSize: const Size.fromHeight(52),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          child: const Text(
+            'VOLVER AL INICIO',
+            style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.4),
+          ),
         ),
       ],
     );

@@ -120,6 +120,50 @@ class ApiConfig {
   static String stripeEstadoVentaUrlDesde(String base, int ventaId) =>
       '$base/pagos/stripe/ventas/$ventaId/estado';
 
+  // ---------------------------------------------------------------------------
+  // CU23 - Comprobante de venta del CLIENTE (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint del comprobante de una venta (`GET`, solo lectura).
+  ///
+  /// El backend valida que la venta sea del cliente autenticado, que esté
+  /// COMPLETADA y que tenga un pago APROBADO; devuelve el comprobante ya
+  /// construido. No persiste nada.
+  static String comprobanteVentaUrl(int ventaId) =>
+      comprobanteVentaUrlDesde(baseUrl, ventaId);
+
+  /// Endpoint del comprobante para una URL base dada.
+  ///
+  /// Se parametriza para poder probar el servicio sin depender de
+  /// `--dart-define=API_BASE_URL`.
+  static String comprobanteVentaUrlDesde(String base, int ventaId) =>
+      '$base/ventas/$ventaId/comprobante';
+
+  // ---------------------------------------------------------------------------
+  // CU24 - Historial de compras del CLIENTE (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint del historial paginado del cliente autenticado (`GET`).
+  ///
+  /// El backend identifica al cliente por el JWT: la app nunca envía
+  /// `cliente_id`.
+  static String get historialComprasUrl => historialComprasUrlDesde(baseUrl);
+
+  /// Endpoint del historial para una URL base dada.
+  ///
+  /// Se parametriza para poder probar el servicio sin depender de
+  /// `--dart-define=API_BASE_URL`.
+  static String historialComprasUrlDesde(String base) =>
+      '$base/ventas/historial';
+
+  /// Endpoint del detalle de una compra del historial (`GET`).
+  static String historialCompraDetalleUrl(int ventaId) =>
+      historialCompraDetalleUrlDesde(baseUrl, ventaId);
+
+  /// Endpoint del detalle para una URL base dada.
+  static String historialCompraDetalleUrlDesde(String base, int ventaId) =>
+      '$base/ventas/historial/$ventaId';
+
   /// Ayuda para desarrollo cuando falta configurar la URL base.
   static const String missingBaseUrlHint =
       'Falta configurar API_BASE_URL. Ejecuta la app con '
