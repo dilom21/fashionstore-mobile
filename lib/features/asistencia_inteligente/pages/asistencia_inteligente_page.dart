@@ -4,6 +4,7 @@ import '../../../core/session/session_expired.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../carrito/services/carrito_service.dart';
 import '../../catalogo/pages/producto_detalle_page.dart';
+import '../../vestidor_virtual/services/vestidor_flow_service.dart';
 import '../models/asistencia_models.dart';
 import '../services/asistencia_service.dart';
 import '../widgets/recomendacion_card.dart';
@@ -18,12 +19,13 @@ import '../widgets/recomendacion_card.dart';
 /// - Agregar: usa CU15 (`CarritoService.agregarItem`) solo si hay inventario y
 ///   sucursal resueltos; si no, abre el detalle para elegir talla.
 /// - Ver detalle: reutiliza `ProductoDetallePage`.
-/// - Probar en vestidor: CTA preparado para el futuro CU de AR (sin AR aún).
+/// - Probar en vestidor: usa el flujo real del CU26 (`VestidorFlowService`).
 class AsistenciaInteligentePage extends StatefulWidget {
   const AsistenciaInteligentePage({
     super.key,
     this.service,
     this.carritoService,
+    this.vestidorFlow,
   });
 
   /// Servicio inyectable (facilita pruebas).
@@ -32,13 +34,15 @@ class AsistenciaInteligentePage extends StatefulWidget {
   /// Servicio de carrito inyectable (facilita pruebas).
   final CarritoService? carritoService;
 
+  /// Servicio inyectable del flujo del vestidor virtual (facilita pruebas).
+  final VestidorFlowService? vestidorFlow;
+
   @override
   State<AsistenciaInteligentePage> createState() =>
       _AsistenciaInteligentePageState();
 }
 
-class _AsistenciaInteligentePageState
-    extends State<AsistenciaInteligentePage> {
+class _AsistenciaInteligentePageState extends State<AsistenciaInteligentePage> {
   static const List<String> _sugerencias = <String>[
     'Oficina',
     'Casual',
@@ -49,6 +53,7 @@ class _AsistenciaInteligentePageState
 
   late final AsistenciaService _service;
   late final CarritoService _carritoService;
+  late final VestidorFlowService _vestidorFlow;
   final TextEditingController _consultaController = TextEditingController();
 
   String? _talla;
@@ -57,11 +62,15 @@ class _AsistenciaInteligentePageState
   RecomendacionesResponse? _respuesta;
   int? _agregandoProductoId;
 
+  /// Producto cuyo vestidor se está abriendo (evita dobles aperturas).
+  int? _abriendoVestidorProductoId;
+
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? AsistenciaService();
     _carritoService = widget.carritoService ?? CarritoService();
+    _vestidorFlow = widget.vestidorFlow ?? VestidorFlowService();
   }
 
   @override
@@ -170,37 +179,22 @@ class _AsistenciaInteligentePageState
     }
   }
 
-  void _probarVestidor() {
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text(
-          'Vestidor virtual',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        content: const Text(
-          'El probador con realidad aumentada estará disponible próximamente.',
-          style: TextStyle(fontSize: 14, height: 1.5, color: AppColors.textMuted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text(
-              'Entendido',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  /// Abre el flujo real del vestidor virtual (CU26) para la recomendación.
+  ///
+  /// Reenvía `varianteId` cuando la recomendación lo trae resuelto; si no, el
+  /// flujo decide (y pide elegir color si hay varias configuraciones).
+  Future<void> _probarVestidor(RecomendacionProducto recomendacion) async {
+    if (_abriendoVestidorProductoId != null) return;
+    setState(() => _abriendoVestidorProductoId = recomendacion.productoId);
+    try {
+      await _vestidorFlow.abrirVestidor(
+        context,
+        productoId: recomendacion.productoId,
+        varianteId: recomendacion.varianteId,
+      );
+    } finally {
+      if (mounted) setState(() => _abriendoVestidorProductoId = null);
+    }
   }
 
   void _mostrarMensaje(String mensaje) {
@@ -239,10 +233,7 @@ class _AsistenciaInteligentePageState
           children: [
             const _Encabezado(),
             const SizedBox(height: 20),
-            _Buscador(
-              controller: _consultaController,
-              onEnviar: _buscar,
-            ),
+            _Buscador(controller: _consultaController, onEnviar: _buscar),
             const SizedBox(height: 14),
             _Sugerencias(
               sugerencias: _sugerencias,
@@ -276,9 +267,7 @@ class _AsistenciaInteligentePageState
     }
 
     if (_error != null) {
-      return <Widget>[
-        _BloqueError(mensaje: _error!, onReintentar: _buscar),
-      ];
+      return <Widget>[_BloqueError(mensaje: _error!, onReintentar: _buscar)];
     }
 
     final RecomendacionesResponse? respuesta = _respuesta;
@@ -303,7 +292,7 @@ class _AsistenciaInteligentePageState
           agregando: _agregandoProductoId == recomendacion.productoId,
           onAgregar: () => _agregar(recomendacion),
           onVerDetalle: () => _abrirDetalle(recomendacion.productoId),
-          onProbarVestidor: _probarVestidor,
+          onProbarVestidor: () => _probarVestidor(recomendacion),
         ),
     ];
   }

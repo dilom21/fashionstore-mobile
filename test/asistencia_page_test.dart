@@ -16,6 +16,7 @@ import 'package:fashionstore_mobile/features/carrito/models/carrito_model.dart';
 import 'package:fashionstore_mobile/features/carrito/services/carrito_service.dart';
 import 'package:fashionstore_mobile/features/catalogo/pages/producto_detalle_page.dart';
 import 'package:fashionstore_mobile/features/inicio/pages/inicio_page.dart';
+import 'package:fashionstore_mobile/features/vestidor_virtual/services/vestidor_flow_service.dart';
 
 // -----------------------------------------------------------------------------
 // Dobles
@@ -81,6 +82,25 @@ class _Observer extends NavigatorObserver {
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     pushed.add(route);
     super.didPush(route, previousRoute);
+  }
+}
+
+/// Flujo del vestidor falso: registra el producto y la variante recibidos.
+class _FakeVestidorFlow extends VestidorFlowService {
+  int llamadas = 0;
+  int? ultimoProductoId;
+  int? ultimaVarianteId;
+
+  @override
+  Future<VestidorFlowResultado> abrirVestidor(
+    BuildContext context, {
+    required int productoId,
+    int? varianteId,
+  }) async {
+    llamadas++;
+    ultimoProductoId = productoId;
+    ultimaVarianteId = varianteId;
+    return VestidorFlowResultado.completado;
   }
 }
 
@@ -216,43 +236,45 @@ void main() {
     expect(find.text('No encontramos prendas disponibles.'), findsOneWidget);
   });
 
-  testWidgets('renderiza cards con datos reales y los chips rellenan la consulta',
-      (tester) async {
-    final _FakeAsistenciaService service = _FakeAsistenciaService(<Object>[
-      _respuesta(<RecomendacionProducto>[_rec()]),
-    ]);
+  testWidgets(
+    'renderiza cards con datos reales y los chips rellenan la consulta',
+    (tester) async {
+      final _FakeAsistenciaService service = _FakeAsistenciaService(<Object>[
+        _respuesta(<RecomendacionProducto>[_rec()]),
+      ]);
 
-    await _pump(
-      tester,
-      AsistenciaInteligentePage(
-        service: service,
-        carritoService: _FakeCarritoService(),
-      ),
-    );
+      await _pump(
+        tester,
+        AsistenciaInteligentePage(
+          service: service,
+          carritoService: _FakeCarritoService(),
+        ),
+      );
 
-    await _enviar(tester, 'look formal');
-    await tester.pump();
+      await _enviar(tester, 'look formal');
+      await tester.pump();
 
-    expect(find.text('Polo Premium'), findsOneWidget);
-    expect(find.text('Bs 149.90'), findsOneWidget);
-    expect(find.text('Stock: 5'), findsOneWidget);
-    expect(find.text('Ideal para oficina'), findsOneWidget);
-    expect(find.text('Look casual'), findsOneWidget);
+      expect(find.text('Polo Premium'), findsOneWidget);
+      expect(find.text('Bs 149.90'), findsOneWidget);
+      expect(find.text('Stock: 5'), findsOneWidget);
+      expect(find.text('Ideal para oficina'), findsOneWidget);
+      expect(find.text('Look casual'), findsOneWidget);
 
-    // Chip de estilo.
-    await tester.tap(find.text('Casual'));
-    await tester.pump();
-    final TextField campo = tester.widget(find.byType(TextField));
-    expect(campo.controller!.text, contains('Casual'));
+      // Chip de estilo.
+      await tester.tap(find.text('Casual'));
+      await tester.pump();
+      final TextField campo = tester.widget(find.byType(TextField));
+      expect(campo.controller!.text, contains('Casual'));
 
-    // Chip de talla: setea el filtro y viaja al backend. Se usa `.first`
-    // porque la tarjeta también muestra la etiqueta "Talla M".
-    await tester.tap(find.text('Talla M').first);
-    await tester.pump();
-    await tester.tap(find.byIcon(Icons.send_rounded));
-    await tester.pump();
-    expect(service.ultimaTalla, 'M');
-  });
+      // Chip de talla: setea el filtro y viaja al backend. Se usa `.first`
+      // porque la tarjeta también muestra la etiqueta "Talla M".
+      await tester.tap(find.text('Talla M').first);
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pump();
+      expect(service.ultimaTalla, 'M');
+    },
+  );
 
   testWidgets('Ver detalle abre ProductoDetallePage', (tester) async {
     final _Observer observer = _Observer();
@@ -309,12 +331,11 @@ void main() {
     expect(find.text('Prenda agregada al carrito.'), findsOneWidget);
   });
 
-  testWidgets('selección requerida abre el detalle y no agrega',
-      (tester) async {
+  testWidgets('selección requerida abre el detalle y no agrega', (
+    tester,
+  ) async {
     final _FakeAsistenciaService service = _FakeAsistenciaService(<Object>[
-      _respuesta(
-        <RecomendacionProducto>[_rec(requiereSeleccion: true)],
-      ),
+      _respuesta(<RecomendacionProducto>[_rec(requiereSeleccion: true)]),
     ]);
     final _FakeCarritoService carrito = _FakeCarritoService();
 
@@ -337,17 +358,20 @@ void main() {
     expect(find.byType(ProductoDetallePage), findsOneWidget);
   });
 
-  testWidgets('Probar en vestidor muestra el placeholder de AR',
-      (tester) async {
+  testWidgets('Probar en vestidor usa el productoId de la recomendación', (
+    tester,
+  ) async {
     final _FakeAsistenciaService service = _FakeAsistenciaService(<Object>[
       _respuesta(<RecomendacionProducto>[_rec()]),
     ]);
+    final _FakeVestidorFlow vestidor = _FakeVestidorFlow();
 
     await _pump(
       tester,
       AsistenciaInteligentePage(
         service: service,
         carritoService: _FakeCarritoService(),
+        vestidorFlow: vestidor,
       ),
     );
 
@@ -357,18 +381,81 @@ void main() {
     await tester.ensureVisible(find.text('Probar en vestidor'));
     await tester.pump();
     await tester.tap(find.text('Probar en vestidor'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
 
+    expect(vestidor.llamadas, 1);
+    expect(vestidor.ultimoProductoId, 1);
     expect(
       find.text(
         'El probador con realidad aumentada estará disponible próximamente.',
       ),
-      findsOneWidget,
+      findsNothing,
     );
   });
 
-  testWidgets('InicioPage abre AsistenciaInteligentePage desde el CTA',
-      (tester) async {
+  testWidgets('Probar en vestidor reenvía la variante cuando existe', (
+    tester,
+  ) async {
+    final _FakeAsistenciaService service = _FakeAsistenciaService(<Object>[
+      _respuesta(<RecomendacionProducto>[_rec()]),
+    ]);
+    final _FakeVestidorFlow vestidor = _FakeVestidorFlow();
+
+    await _pump(
+      tester,
+      AsistenciaInteligentePage(
+        service: service,
+        carritoService: _FakeCarritoService(),
+        vestidorFlow: vestidor,
+      ),
+    );
+
+    await _enviar(tester, 'look casual');
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Probar en vestidor'));
+    await tester.pump();
+    await tester.tap(find.text('Probar en vestidor'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(vestidor.ultimaVarianteId, 10);
+  });
+
+  testWidgets('Probar en vestidor sin variante llama con varianteId null', (
+    tester,
+  ) async {
+    final _FakeAsistenciaService service = _FakeAsistenciaService(<Object>[
+      _respuesta(<RecomendacionProducto>[_rec(requiereSeleccion: true)]),
+    ]);
+    final _FakeVestidorFlow vestidor = _FakeVestidorFlow();
+
+    await _pump(
+      tester,
+      AsistenciaInteligentePage(
+        service: service,
+        carritoService: _FakeCarritoService(),
+        vestidorFlow: vestidor,
+      ),
+    );
+
+    await _enviar(tester, 'look casual');
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Probar en vestidor'));
+    await tester.pump();
+    await tester.tap(find.text('Probar en vestidor'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(vestidor.llamadas, 1);
+    expect(vestidor.ultimaVarianteId, isNull);
+  });
+
+  testWidgets('InicioPage abre AsistenciaInteligentePage desde el CTA', (
+    tester,
+  ) async {
     final _Observer observer = _Observer();
     await tester.pumpWidget(
       MaterialApp(

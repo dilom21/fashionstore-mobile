@@ -9,6 +9,7 @@ import '../models/pose_detection_result.dart';
 import '../models/pose_landmark.dart';
 import '../models/torso_anchor.dart';
 import '../models/vestidor_config_model.dart';
+import '../models/vestidor_motor_resultado.dart';
 import '../services/camera_permission_service.dart';
 import '../services/pose_landmark_stream_service.dart';
 import '../services/pose_smoothing_service.dart';
@@ -273,7 +274,13 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
     _verificarPermiso();
   }
 
-  void _volver() => Navigator.of(context).pop();
+  /// Cierra el motor informando que la prueba fue CANCELADA (VOLVER, Back del
+  /// sistema o AppBar). Nunca completa la prueba.
+  void _volver() => Navigator.of(context).pop(VestidorMotorResultado.cancelada);
+
+  /// Cierra el motor informando que el cliente confirmó la prueba ("LISTO").
+  void _finalizar() =>
+      Navigator.of(context).pop(VestidorMotorResultado.completada);
 
   @override
   Widget build(BuildContext context) {
@@ -283,117 +290,132 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
     final bool mostrarCamara = _mostrarCamara;
     final bool operativo = _operativo;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
+    return PopScope<VestidorMotorResultado>(
+      // El Back del sistema (o el AppBar) SIEMPRE cancela la prueba; nunca la
+      // completa. La única forma de completarla es el botón LISTO.
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, VestidorMotorResultado? resultado) {
+        if (didPop) return;
+        _volver();
+      },
+      child: Scaffold(
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'VESTIDOR VIRTUAL',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 3,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          title: const Text(
+            'VESTIDOR VIRTUAL',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 3,
+            ),
           ),
         ),
-      ),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // La vista nativa (CameraX + MediaPipe) SOLO se construye cuando el
-            // permiso de cámara está concedido: CameraX nunca intenta abrir la
-            // cámara sin permiso.
-            // Configuración no usable: estado controlado, jamás se construye la
-            // cámara (no se rompe CameraX).
-            if (!_configuracionUsable)
-              Positioned.fill(child: _buildConfiguracionNoUsable())
-            else if (mostrarCamara)
-              const Positioned.fill(child: PoseCameraView())
-            else
-              Positioned.fill(child: _buildPermisoPendiente()),
-            // ETAPA 6: PRENDA PNG sobre el torso. Se mantiene MONTADA aunque se
-            // pierda la pose (con `anchor: null`) para conservar la imagen ya
-            // descargada: al recuperar la pose se dibuja al instante y sin
-            // volver a pedir el PNG.
-            if (operativo)
-              Positioned.fill(
-                child: PrendaOverlay(
-                  anchor: _torso,
-                  configuracion: widget.configuracion,
-                  imageWidth: resultado?.imageWidth ?? 0,
-                  imageHeight: resultado?.imageHeight ?? 0,
-                ),
-              ),
-            // ---- Overlays de DIAGNÓSTICO (se pueden desactivar sin tocar el
-            // motor: basta con no montarlos; el motor no depende de ellos) ----
-            // Esqueleto de DIAGNÓSTICO: se dibuja siempre que MediaPipe detecte
-            // pose, aunque el vestidor todavía no la considere utilizable. Solo
-            // desaparece tras varios frames seguidos sin detección (histéresis).
-            if (operativo && resultado != null && resultado.poseDetected)
-              Positioned.fill(child: PoseOverlay(resultado: resultado)),
-            // Etapa 5: rectángulo de DIAGNÓSTICO del torso (ancla base con su
-            // propio margen de 1.15, ajeno a los factores de la configuración).
-            if (operativo &&
-                resultado != null &&
-                resultado.poseDetected &&
-                _torso != null)
-              Positioned.fill(
-                child: TorsoAnchorOverlay(
-                  anchor: _torso!,
-                  imageWidth: resultado.imageWidth,
-                  imageHeight: resultado.imageHeight,
-                ),
-              ),
-            // Diagnóstico de pose y controles: solo con la cámara activa.
-            if (operativo)
-              Positioned(
-                left: 20,
-                right: 20,
-                top: 16,
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: _DiagnosticoPose(
-                    resultado: _resultado,
-                    estado: _estadoPose,
-                    configuracion: widget.configuracion,
-                    motivo: _motivoPose,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              // La vista nativa (CameraX + MediaPipe) SOLO se construye cuando el
+              // permiso de cámara está concedido: CameraX nunca intenta abrir la
+              // cámara sin permiso.
+              // Configuración no usable: estado controlado, jamás se construye la
+              // cámara (no se rompe CameraX).
+              if (!_configuracionUsable)
+                Positioned.fill(child: _buildConfiguracionNoUsable())
+              else if (mostrarCamara)
+                const Positioned.fill(child: PoseCameraView())
+              else
+                Positioned.fill(child: _buildPermisoPendiente()),
+              // ETAPA 6: PRENDA PNG sobre el torso. Se mantiene MONTADA aunque se
+              // pierda la pose (con `anchor: null`) para conservar la imagen ya
+              // descargada: al recuperar la pose se dibuja al instante y sin
+              // volver a pedir el PNG.
+              if (operativo)
+                Positioned.fill(
+                  child: PrendaOverlay(
                     anchor: _torso,
-                    conError: _streamConError,
+                    configuracion: widget.configuracion,
+                    imageWidth: resultado?.imageWidth ?? 0,
+                    imageHeight: resultado?.imageHeight ?? 0,
                   ),
                 ),
-              ),
-            if (operativo)
-              Positioned(
-                left: 20,
-                right: 20,
-                bottom: 24,
-                child: Row(
-                  children: [
-                    const _EtiquetaCamara(),
-                    const Spacer(),
-                    OutlinedButton.icon(
-                      onPressed: _volver,
-                      icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                      label: const Text('VOLVER'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.black.withValues(alpha: 0.45),
-                        side: const BorderSide(color: AppColors.border),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+              // ---- Overlays de DIAGNÓSTICO (se pueden desactivar sin tocar el
+              // motor: basta con no montarlos; el motor no depende de ellos) ----
+              // Esqueleto de DIAGNÓSTICO: se dibuja siempre que MediaPipe detecte
+              // pose, aunque el vestidor todavía no la considere utilizable. Solo
+              // desaparece tras varios frames seguidos sin detección (histéresis).
+              if (operativo && resultado != null && resultado.poseDetected)
+                Positioned.fill(child: PoseOverlay(resultado: resultado)),
+              // Etapa 5: rectángulo de DIAGNÓSTICO del torso (ancla base con su
+              // propio margen de 1.15, ajeno a los factores de la configuración).
+              if (operativo &&
+                  resultado != null &&
+                  resultado.poseDetected &&
+                  _torso != null)
+                Positioned.fill(
+                  child: TorsoAnchorOverlay(
+                    anchor: _torso!,
+                    imageWidth: resultado.imageWidth,
+                    imageHeight: resultado.imageHeight,
+                  ),
+                ),
+              // Diagnóstico de pose y controles: solo con la cámara activa.
+              if (operativo)
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  top: 16,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: _DiagnosticoPose(
+                      resultado: _resultado,
+                      estado: _estadoPose,
+                      configuracion: widget.configuracion,
+                      motivo: _motivoPose,
+                      anchor: _torso,
+                      conError: _streamConError,
+                    ),
+                  ),
+                ),
+              if (operativo)
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: 24,
+                  child: Row(
+                    children: [
+                      const _EtiquetaCamara(),
+                      const Spacer(),
+                      BotonGradiente(
+                        label: 'LISTO',
+                        icon: Icons.check_rounded,
+                        onPressed: _finalizar,
+                      ),
+                      const SizedBox(width: 10),
+                      OutlinedButton.icon(
+                        onPressed: _volver,
+                        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                        label: const Text('VOLVER'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.black.withValues(alpha: 0.45),
+                          side: const BorderSide(color: AppColors.border),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -64,8 +64,7 @@ class VestidorApiService {
       'No pudimos completar la operación del vestidor. Inténtalo nuevamente.';
   static const String _unauthorizedMessage =
       'Tu sesión expiró. Vuelve a iniciar sesión.';
-  static const String _forbiddenMessage =
-      'No tienes acceso a este vestidor.';
+  static const String _forbiddenMessage = 'No tienes acceso a este vestidor.';
   static const String _notFoundMessage =
       'No encontramos la información del vestidor solicitada.';
   static const String _conflictMessage =
@@ -214,9 +213,11 @@ class VestidorApiService {
     try {
       switch (metodo) {
         case 'POST':
-          response = await _client
-              .post(uri, headers: headers, body: jsonEncode(body ?? const {}))
-              .timeout(_timeout);
+          response = body == null
+              ? await _client.post(uri, headers: headers).timeout(_timeout)
+              : await _client
+                    .post(uri, headers: headers, body: jsonEncode(body))
+                    .timeout(_timeout);
         case 'PATCH':
           response = await _client
               .patch(uri, headers: headers, body: jsonEncode(body ?? const {}))
@@ -255,10 +256,7 @@ class VestidorApiService {
           unauthorized: true,
         );
       case 403:
-        return const VestidorApiException(
-          _forbiddenMessage,
-          statusCode: 403,
-        );
+        return const VestidorApiException(_forbiddenMessage, statusCode: 403);
       case 404:
         return const VestidorApiException(
           _notFoundMessage,
@@ -272,10 +270,7 @@ class VestidorApiService {
           conflict: true,
         );
       case 422:
-        return const VestidorApiException(
-          _validationMessage,
-          statusCode: 422,
-        );
+        return const VestidorApiException(_validationMessage, statusCode: 422);
       default:
         return VestidorApiException(
           _unexpectedErrorMessage,

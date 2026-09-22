@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../carrito/widgets/agregar_al_carrito_section.dart';
+import '../../vestidor_virtual/services/vestidor_flow_service.dart';
 import '../models/catalogo_filtros_model.dart';
 import '../models/producto_model.dart';
 import '../services/catalogo_service.dart';
@@ -18,6 +19,7 @@ class ProductoDetallePage extends StatefulWidget {
     required this.productoId,
     this.filtros,
     this.service,
+    this.vestidorFlow,
   });
 
   final int productoId;
@@ -28,21 +30,43 @@ class ProductoDetallePage extends StatefulWidget {
   /// Servicio inyectable (facilita pruebas).
   final CatalogoService? service;
 
+  /// Servicio inyectable del flujo del vestidor virtual (facilita pruebas).
+  final VestidorFlowService? vestidorFlow;
+
   @override
   State<ProductoDetallePage> createState() => _ProductoDetallePageState();
 }
 
 class _ProductoDetallePageState extends State<ProductoDetallePage> {
   late final CatalogoService _service;
+  late final VestidorFlowService _vestidorFlow;
   bool _cargando = true;
   String? _error;
   ProductoDetalle? _producto;
+
+  /// Evita abrir dos veces el vestidor con un doble toque.
+  bool _abriendoVestidor = false;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? CatalogoService();
+    _vestidorFlow = widget.vestidorFlow ?? VestidorFlowService();
     _cargar();
+  }
+
+  /// Abre el flujo real del vestidor virtual (CU26) para este producto.
+  ///
+  /// No se fija variante: si el producto tiene varias configuraciones AR, el
+  /// propio flujo pide al cliente elegir el color.
+  Future<void> _probarEnVestidor() async {
+    if (_abriendoVestidor) return;
+    setState(() => _abriendoVestidor = true);
+    try {
+      await _vestidorFlow.abrirVestidor(context, productoId: widget.productoId);
+    } finally {
+      if (mounted) setState(() => _abriendoVestidor = false);
+    }
   }
 
   Future<void> _cargar() async {
@@ -202,6 +226,40 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
           ),
           const SizedBox(height: 18),
           AgregarAlCarritoSection(producto: producto, onRecargar: _cargar),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _abriendoVestidor ? null : _probarEnVestidor,
+              icon: _abriendoVestidor
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.secondary,
+                        ),
+                      ),
+                    )
+                  : const Icon(Icons.checkroom_rounded, size: 18),
+              label: const Text(
+                'PROBAR EN VESTIDOR',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.secondary,
+                side: const BorderSide(color: AppColors.secondary),
+                minimumSize: const Size.fromHeight(50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
           if ((producto.descripcion?.trim() ?? '').isNotEmpty) ...[
             const _Subtitulo('DESCRIPCIÓN'),
