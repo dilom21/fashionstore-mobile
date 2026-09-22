@@ -135,6 +135,54 @@ class ApiConfig {
   static String stripeEstadoVentaUrlDesde(String base, int ventaId) =>
       '$base/pagos/stripe/ventas/$ventaId/estado';
 
+  // ---------------------------------------------------------------------------
+  // CU26 - Vestidor virtual AR del CLIENTE (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+  //
+  // El backend solo entrega metadatos (asset PNG transparente, factores y
+  // offsets de anclaje al torso). La detección corporal ocurre 100% local en el
+  // teléfono (motor CameraX + MediaPipe de Harold); estas rutas no procesan
+  // frames ni imágenes de cámara.
+
+  /// Configuraciones AR compatibles de un producto (`GET`).
+  static String vestidorConfiguracionesUrl(int productoId) =>
+      vestidorConfiguracionesUrlDesde(baseUrl, productoId);
+
+  /// Configuraciones AR de un producto para una URL base dada.
+  static String vestidorConfiguracionesUrlDesde(String base, int productoId) =>
+      '$base/vestidor-virtual/productos/$productoId/configuraciones';
+
+  /// Creación de sesión de vestidor (`POST`).
+  static String get vestidorSesionesUrl => vestidorSesionesUrlDesde(baseUrl);
+
+  /// Creación de sesión para una URL base dada.
+  static String vestidorSesionesUrlDesde(String base) =>
+      '$base/vestidor-virtual/sesiones';
+
+  /// Registro de inicio de prueba dentro de una sesión (`POST`).
+  static String vestidorSesionPruebasUrl(int sesionId) =>
+      vestidorSesionPruebasUrlDesde(baseUrl, sesionId);
+
+  /// Registro de inicio de prueba para una URL base dada.
+  static String vestidorSesionPruebasUrlDesde(String base, int sesionId) =>
+      '$base/vestidor-virtual/sesiones/$sesionId/pruebas';
+
+  /// Finalización de una prueba (`PATCH`).
+  static String vestidorPruebaFinalizarUrl(int pruebaId) =>
+      vestidorPruebaFinalizarUrlDesde(baseUrl, pruebaId);
+
+  /// Finalización de una prueba para una URL base dada.
+  static String vestidorPruebaFinalizarUrlDesde(String base, int pruebaId) =>
+      '$base/vestidor-virtual/pruebas/$pruebaId/finalizar';
+
+  /// Finalización de una sesión (`PATCH`).
+  static String vestidorSesionFinalizarUrl(int sesionId) =>
+      vestidorSesionFinalizarUrlDesde(baseUrl, sesionId);
+
+  /// Finalización de una sesión para una URL base dada.
+  static String vestidorSesionFinalizarUrlDesde(String base, int sesionId) =>
+      '$base/vestidor-virtual/sesiones/$sesionId/finalizar';
+
   /// Ayuda para desarrollo cuando falta configurar la URL base.
   static const String missingBaseUrlHint =
       'Falta configurar API_BASE_URL. Ejecuta la app con '
