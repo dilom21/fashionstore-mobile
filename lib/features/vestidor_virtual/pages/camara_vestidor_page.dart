@@ -357,6 +357,7 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
                   child: _DiagnosticoPose(
                     resultado: _resultado,
                     estado: _estadoPose,
+                    configuracion: widget.configuracion,
                     motivo: _motivoPose,
                     anchor: _torso,
                     conError: _streamConError,
@@ -628,6 +629,7 @@ class _DiagnosticoPose extends StatelessWidget {
   const _DiagnosticoPose({
     required this.resultado,
     required this.estado,
+    required this.configuracion,
     this.motivo,
     this.anchor,
     this.conError = false,
@@ -635,6 +637,10 @@ class _DiagnosticoPose extends StatelessWidget {
 
   final PoseDetectionResult? resultado;
   final EstadoPose estado;
+
+  /// Configuración AR activa (DEBUG Etapa 7): permite comprobar en el teléfono
+  /// que cada prenda usa su producto/configuración y sus factores del backend.
+  final VestidorConfig configuracion;
 
   /// Motivo técnico del último rechazo del validador (solo diagnóstico).
   final String? motivo;
@@ -730,6 +736,17 @@ class _DiagnosticoPose extends StatelessWidget {
               style: _estiloDetalle,
             ),
           ],
+          // DEBUG Etapa 7: qué configuración del backend está renderizando la
+          // prenda (producto, configuración y factores reales). El assetUrl no
+          // se muestra para no ensuciar la UI.
+          const SizedBox(height: 4),
+          Text(
+            'Prenda: prod ${configuracion.productoId} · '
+            'config ${configuracion.configuracionId} · '
+            'ancho ${configuracion.factorAncho.toStringAsFixed(2)} · '
+            'alto ${configuracion.factorAlto.toStringAsFixed(2)}',
+            style: _estiloDetalle,
+          ),
           if (detectada && !lista && tecnico != null && tecnico.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(

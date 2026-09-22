@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../carrito/widgets/boton_gradiente.dart';
+import '../models/prenda_tecnica_e2e.dart';
 import '../models/vestidor_config_model.dart';
 import '../services/camera_permission_service.dart';
 import '../services/pose_landmarker_service.dart';
@@ -41,22 +42,25 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
   bool _permisoBloqueado = false;
 
   // ---------------------------------------------------------------------------
-  // LAUNCHER TEMPORAL DE PRUEBA E2E (Etapa 6)
+  // SELECTOR TÉCNICO E2E CU26 (Etapas 6 y 7) - TEMPORAL
   //
   // Mientras no exista la integración con ProductoDetalle/Asistencia, esta
-  // pantalla consigue UNA configuración real para poder probar la prenda en el
-  // teléfono. NO es el comportamiento definitivo del negocio: el producto se
-  // elige a mano y luego se reemplaza por la navegación real.
+  // pantalla permite elegir a mano QUÉ prenda probar y consigue su configuración
+  // real del backend. NO es el comportamiento definitivo del negocio.
+  //
+  // Solo se fijan aquí `productoId` y `configuracionId` (validación física):
+  // assetUrl, factores, offsets, rotación y opacidad SIEMPRE vienen del backend.
   // ---------------------------------------------------------------------------
-
-  /// Producto de prueba E2E (Camiseta Essential Cotton).
-  static const int productoIdPruebaE2E = 6;
-
-  /// Configuración preferida de esa camiseta (negra, PNG_2D, TORSO).
-  static const int configuracionIdPreferidaE2E = 56;
 
   /// Servicio HTTP del contrato de Josías. SOLO se usa FUERA del motor AR.
   final VestidorApiService _vestidorApi = VestidorApiService();
+
+  /// Prenda elegida en el selector técnico (índice del catálogo E2E).
+  int _indicePrendaE2E = 0;
+
+  /// Prenda vigente del selector técnico.
+  PrendaTecnicaE2E get _prendaE2E =>
+      PrendaTecnicaE2E.catalogoTecnico[_indicePrendaE2E];
 
   bool _cargandoConfig = false;
   String? _resumenConfig;
@@ -142,13 +146,14 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
     });
   }
 
-  /// LAUNCHER TEMPORAL E2E (Etapa 6): pide al backend UNA configuración real del
-  /// producto de prueba y abre el motor AR con ella.
+  /// LAUNCHER TEMPORAL E2E (Etapa 7): pide al backend la configuración EXACTA
+  /// elegida en el selector técnico y abre el motor AR con ella.
   ///
   /// El motor (`CamaraVestidorPage`) NO hace requests: recibe el DTO ya resuelto.
   /// Esta llamada puede hacer HTTP porque está FUERA del motor.
   Future<void> _cargarConfiguracionE2E() async {
     if (_cargandoConfig) return;
+    final PrendaTecnicaE2E prenda = _prendaE2E;
     setState(() {
       _cargandoConfig = true;
       _resumenConfig = null;
@@ -156,24 +161,30 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
 
     try {
       final VestidorConfiguracionesResponse respuesta = await _vestidorApi
-          .obtenerConfiguraciones(productoId: productoIdPruebaE2E);
-      final VestidorConfig? config = _elegirConfiguracionE2E(respuesta);
+          .obtenerConfiguraciones(productoId: prenda.productoId);
+
+      // Selección ESTRICTA: si la configuración pedida no existe o no es
+      // compatible se muestra el error y NUNCA se prueba otra prenda.
+      final SeleccionConfigE2E seleccion = seleccionarConfiguracionE2E(
+        configuraciones: respuesta.configuraciones,
+        configuracionId: prenda.configuracionId,
+        productoId: prenda.productoId,
+      );
       if (!mounted) return;
 
-      if (config == null) {
+      if (!seleccion.esExito) {
         setState(() => _cargandoConfig = false);
-        _mostrarAviso(
-          'La prenda de prueba (producto $productoIdPruebaE2E) no tiene una '
-          'configuración de vestidor compatible.',
-        );
+        _mostrarAviso(seleccion.error ?? 'Prenda de prueba no disponible.');
         return;
       }
 
+      final VestidorConfig config = seleccion.configuracion!;
       setState(() {
         _cargandoConfig = false;
         _resumenConfig =
-            'Prueba E2E: producto ${config.productoId} · config '
-            '${config.configuracionId} · ${config.colorEtiqueta}';
+            'E2E: ${prenda.etiqueta} · ${config.colorEtiqueta} · '
+            'producto ${config.productoId} · config '
+            '${config.configuracionId}';
       });
       _irACamara(config);
     } on VestidorApiException catch (error) {
@@ -185,23 +196,6 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
       setState(() => _cargandoConfig = false);
       _mostrarAviso('No pudimos preparar la prenda de prueba.');
     }
-  }
-
-  /// Elige la configuración de prueba: prefiere la 56 si es usable y de torso.
-  VestidorConfig? _elegirConfiguracionE2E(
-    VestidorConfiguracionesResponse respuesta,
-  ) {
-    for (final VestidorConfig config in respuesta.configuraciones) {
-      if (config.configuracionId == configuracionIdPreferidaE2E &&
-          config.esUsable &&
-          config.esTorso) {
-        return config;
-      }
-    }
-    for (final VestidorConfig config in respuesta.configuraciones) {
-      if (config.esUsable && config.esTorso) return config;
-    }
-    return respuesta.primeraUsable;
   }
 
   /// Aviso discreto (SnackBar) para los errores del launcher de prueba.
@@ -301,6 +295,20 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
                 // Etapa 2 complete la detección de pose.
                 _DiagnosticoMediaPipe(estado: _estado, detalle: _detalleError),
                 const SizedBox(height: 24),
+                // SELECTOR TÉCNICO E2E CU26 (TEMPORAL): permite validar en el
+                // teléfono varias prendas con el MISMO motor 2D. No es diseño
+                // definitivo ni navegación real de catálogo.
+                _SelectorTecnicoE2E(
+                  indice: _indicePrendaE2E,
+                  habilitado: !_cargandoConfig,
+                  onCambiar: (int indice) {
+                    setState(() {
+                      _indicePrendaE2E = indice;
+                      _resumenConfig = null;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
                 BotonGradiente(
                   label: 'INICIAR VESTIDOR',
                   icon: Icons.camera_alt_rounded,
@@ -428,6 +436,91 @@ class _DiagnosticoMediaPipe extends StatelessWidget {
   static String _recortar(String valor) {
     if (valor.length <= 240) return valor;
     return '${valor.substring(0, 237)}...';
+  }
+}
+
+/// Selector técnico TEMPORAL de prendas (CU26 – Etapa 7).
+///
+/// Solo elige QUÉ producto/configuración se pide al backend; no conoce assets ni
+/// factores. Se elimina cuando exista la navegación real desde el detalle del
+/// producto.
+class _SelectorTecnicoE2E extends StatelessWidget {
+  const _SelectorTecnicoE2E({
+    required this.indice,
+    required this.habilitado,
+    required this.onCambiar,
+  });
+
+  /// Índice vigente dentro de [PrendaTecnicaE2E.catalogoTecnico].
+  final int indice;
+
+  /// `false` mientras hay una carga en curso (evita cambios a medio camino).
+  final bool habilitado;
+
+  final ValueChanged<int> onCambiar;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<PrendaTecnicaE2E> catalogo = PrendaTecnicaE2E.catalogoTecnico;
+    final PrendaTecnicaE2E prenda = catalogo[indice];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text(
+            'SELECTOR TÉCNICO E2E CU26',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          DropdownButton<int>(
+            value: indice,
+            isExpanded: true,
+            dropdownColor: AppColors.surface,
+            underline: const SizedBox.shrink(),
+            iconEnabledColor: AppColors.textMuted,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+            items: <DropdownMenuItem<int>>[
+              for (int i = 0; i < catalogo.length; i++)
+                DropdownMenuItem<int>(
+                  value: i,
+                  child: Text(catalogo[i].etiqueta),
+                ),
+            ],
+            onChanged: habilitado
+                ? (int? valor) {
+                    if (valor != null) onCambiar(valor);
+                  }
+                : null,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${prenda.resumen} · la configuración, los factores y el asset '
+            'vienen del backend (solo validación).',
+            style: const TextStyle(
+              fontSize: 11,
+              height: 1.4,
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
