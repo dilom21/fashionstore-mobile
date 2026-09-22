@@ -16,34 +16,35 @@ class TorsoAnchor {
   const TorsoAnchor({
     required this.centerX,
     required this.centerY,
-    required this.width,
-    required this.height,
+    required this.shoulderWidth,
+    required this.torsoHeight,
     required this.rotationRadians,
-    this.shoulderWidth = 0,
     this.hipWidth = 0,
   });
 
   /// Centro del torso, en coordenadas normalizadas de la imagen.
+  ///
+  /// Es geometría **BASE**: no lleva offsets ni factores de ninguna prenda.
   final double centerX;
   final double centerY;
 
-  /// Ancho del ancla (normalizado). Sale del ancho de hombros por [factorAncho].
-  final double width;
-
-  /// Alto del ancla (normalizado). Sale de la distancia hombros→caderas.
-  final double height;
-
-  /// Giro del ancla en radianes (inclinación de la línea de hombros).
-  final double rotationRadians;
-
-  /// Distancia real entre hombros (11–12), sin factores. Informativo.
+  /// Ancho de hombros **base** (landmarks 11–12), SIN factores.
+  ///
+  /// La prenda lo multiplica por `VestidorConfig.factorAncho` y el rectángulo de
+  /// diagnóstico usa su propio margen: así nunca hay doble escalado.
   final double shoulderWidth;
+
+  /// Alto del torso **base**: distancia centro de hombros → centro de caderas.
+  final double torsoHeight;
+
+  /// Giro del ancla en radianes (inclinación de la línea de hombros), base.
+  final double rotationRadians;
 
   /// Distancia real entre caderas (23–24); 0.0 si solo se detectó una cadera.
   final double hipWidth;
 
   /// `true` cuando el ancla tiene geometría utilizable.
-  bool get esValido => width > 0 && height > 0;
+  bool get esValido => shoulderWidth > 0 && torsoHeight > 0;
 
   /// Rotación en grados (solo para diagnóstico).
   double get rotationGrados => rotationRadians * 180 / math.pi;
@@ -51,7 +52,8 @@ class TorsoAnchor {
   @override
   String toString() =>
       'TorsoAnchor(center=(${centerX.toStringAsFixed(3)}, '
-      '${centerY.toStringAsFixed(3)}), width=${width.toStringAsFixed(3)}, '
-      'height=${height.toStringAsFixed(3)}, '
+      '${centerY.toStringAsFixed(3)}), '
+      'shoulder=${shoulderWidth.toStringAsFixed(3)}, '
+      'height=${torsoHeight.toStringAsFixed(3)}, '
       'rot=${rotationGrados.toStringAsFixed(1)}°)';
 }

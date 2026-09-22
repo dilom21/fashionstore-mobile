@@ -5,60 +5,29 @@ import '../models/pose_landmark.dart';
 import '../models/torso_anchor.dart';
 import 'pose_validator.dart';
 
-/// Calcula el [TorsoAnchor] (Etapa 5) a partir de un resultado de pose **ya
-/// estabilizado** por `PoseSmoothingService`.
+/// Calcula el [TorsoAnchor] **base** (Etapa 5) a partir de un resultado de pose
+/// **ya estabilizado** por `PoseSmoothingService`.
 ///
-/// Solo geometría: no lee cámara, no hace HTTP, no consulta backend ni Supabase
-/// y no valida la pose por su cuenta (esa decisión ya la tomó `PoseValidator`).
-/// Si faltan landmarks o la geometría es degenerada, devuelve `null` en lugar de
-/// lanzar excepciones por un frame incompleto.
+/// Devuelve SOLO geometría base (centro, ancho de hombros, alto del torso y
+/// giro), sin calibración de ninguna prenda: los factores, offsets y la
+/// opacidad vienen de `VestidorConfig` en la Etapa 6, y el margen del rectángulo
+/// de diagnóstico vive en `TorsoAnchorOverlay`. Así se evita el doble escalado.
 ///
-/// **Factores y offsets centralizados aquí** (no dentro del painter): la Etapa 6
-/// reutilizará este mismo ancla para colocar la prenda.
-///
-/// Nota: `VestidorConfig` (rama dev-josias) NO se copia ni se recrea en esta
-/// etapa; estos parámetros son locales del motor AR.
+/// No lee cámara, no hace HTTP, no consulta backend ni Supabase y no valida la
+/// pose por su cuenta (esa decisión ya la tomó `PoseValidator`). Si faltan
+/// landmarks o la geometría es degenerada devuelve `null`, nunca lanza
+/// excepciones por un frame incompleto.
 class TorsoAnchorService {
   const TorsoAnchorService({
-    this.factorAncho = factorAnchoPorDefecto,
-    this.factorAlto = factorAltoPorDefecto,
-    this.offsetX = offsetXPorDefecto,
-    this.offsetY = offsetYPorDefecto,
-    this.rotationOffset = rotationOffsetPorDefecto,
     this.inclinacionMaximaRad = inclinacionMaximaPorDefecto,
   });
-
-  /// Ancho del ancla = ancho de hombros × [factorAncho].
-  ///
-  /// El ancho se toma SOLO de los hombros (no se combina con caderas): para una
-  /// prenda superior la línea de hombros es la referencia estable, y las caderas
-  /// pueden faltar. 1.15 da un margen para que la futura prenda caiga sobre el
-  /// cuerpo y no quede corta en los costados.
-  static const double factorAnchoPorDefecto = 1.15;
-
-  /// Alto del ancla = distancia hombros→caderas × [factorAlto].
-  ///
-  /// 1.15 estira un poco el alto para que la caja cubra hasta la cadera.
-  static const double factorAltoPorDefecto = 1.15;
-
-  /// Desplazamiento fino del centro, en coordenadas normalizadas de la imagen.
-  static const double offsetXPorDefecto = 0.0;
-  static const double offsetYPorDefecto = 0.0;
-
-  /// Corrección de giro (radianes) para calibrar contra el preview.
-  static const double rotationOffsetPorDefecto = 0.0;
 
   /// Inclinación máxima aceptada de la línea de hombros (radianes).
   ///
   /// 1.05 rad ≈ 60°: más que eso significa que los hombros están prácticamente
-  /// verticales en la imagen (pose girada/caída) y la caja no aportaría nada.
+  /// verticales en la imagen (pose girada/caída) y el ancla no aportaría nada.
   static const double inclinacionMaximaPorDefecto = 1.05;
 
-  final double factorAncho;
-  final double factorAlto;
-  final double offsetX;
-  final double offsetY;
-  final double rotationOffset;
   final double inclinacionMaximaRad;
 
   /// Devuelve el ancla del torso, o `null` si no hay geometría utilizable.
@@ -110,21 +79,41 @@ class TorsoAnchorService {
     //
     // El ángulo se calcula en el MISMO sistema de coordenadas que ya usa
     // `PoseOverlay` para dibujar el esqueleto (la imagen viene rotada/espejada
-    // desde el lado nativo), así que la caja gira coherente con lo que se ve.
-    final double rotacion =
-        math.atan2(hombroDer.y - hombroIzq.y, hombroDer.x - hombroIzq.x) +
-        rotationOffset;
+    // desde el lado nativo).
+    //
+    // IMPORTANTE: la línea de hombros es una orientación NO DIRIGIDA. Al girar
+    // el cuerpo (de espaldas → de frente) el vector 11→12 invierte su sentido y
+    // `atan2` devolvería un ángulo cercano a ±π aunque los hombros sigan
+    // visualmente horizontales. Por eso el ángulo se normaliza a (−π/2, π/2],
+    // que representa la MISMA inclinación visual con o sin inversión.
+    final double rotacion = _normalizarOrientacion(
+      math.atan2(hombroDer.y - hombroIzq.y, hombroDer.x - hombroIzq.x),
+    );
     if (rotacion.abs() > inclinacionMaximaRad) return null;
 
+    // Geometría BASE: sin factores ni offsets (los aplica la prenda con la
+    // configuración, y el rectángulo con su propio margen de diagnóstico).
     return TorsoAnchor(
-      centerX: (shoulderCenterX + hipCenterX) / 2 + offsetX,
-      centerY: (shoulderCenterY + hipCenterY) / 2 + offsetY,
-      width: shoulderWidth * factorAncho,
-      height: altoBase * factorAlto,
-      rotationRadians: rotacion,
+      centerX: (shoulderCenterX + hipCenterX) / 2,
+      centerY: (shoulderCenterY + hipCenterY) / 2,
       shoulderWidth: shoulderWidth,
+      torsoHeight: altoBase,
+      rotationRadians: rotacion,
       hipWidth: anchoCaderas,
     );
+  }
+
+  /// Normaliza el ángulo de una RECTA (orientación no dirigida) a (−π/2, π/2].
+  ///
+  /// `atan2` mide una dirección CON sentido: si el vector 11→12 apunta al lado
+  /// opuesto (persona de frente en lugar de espaldas), devuelve ±π para una
+  /// línea visualmente horizontal. Restar o sumar π da el ángulo equivalente de
+  /// la MISMA recta, de modo que el resultado no depende del orden
+  /// izquierda/derecha con que MediaPipe entregue los hombros.
+  static double _normalizarOrientacion(double angulo) {
+    if (angulo > math.pi / 2) return angulo - math.pi;
+    if (angulo < -math.pi / 2) return angulo + math.pi;
+    return angulo;
   }
 
   /// Distancia euclídea entre dos landmarks normalizados.

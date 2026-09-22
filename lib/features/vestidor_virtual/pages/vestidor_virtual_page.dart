@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../carrito/widgets/boton_gradiente.dart';
+import '../models/vestidor_config_model.dart';
 import '../services/camera_permission_service.dart';
 import '../services/pose_landmarker_service.dart';
+import '../services/vestidor_api_service.dart';
 import 'camara_vestidor_page.dart';
 
 /// CU26 – Vestidor Virtual (Etapa 2A): entrada a la prueba de prendas.
@@ -37,6 +39,27 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
   bool _solicitandoPermiso = false;
   String? _mensajePermiso;
   bool _permisoBloqueado = false;
+
+  // ---------------------------------------------------------------------------
+  // LAUNCHER TEMPORAL DE PRUEBA E2E (Etapa 6)
+  //
+  // Mientras no exista la integración con ProductoDetalle/Asistencia, esta
+  // pantalla consigue UNA configuración real para poder probar la prenda en el
+  // teléfono. NO es el comportamiento definitivo del negocio: el producto se
+  // elige a mano y luego se reemplaza por la navegación real.
+  // ---------------------------------------------------------------------------
+
+  /// Producto de prueba E2E (Camiseta Essential Cotton).
+  static const int productoIdPruebaE2E = 6;
+
+  /// Configuración preferida de esa camiseta (negra, PNG_2D, TORSO).
+  static const int configuracionIdPreferidaE2E = 56;
+
+  /// Servicio HTTP del contrato de Josías. SOLO se usa FUERA del motor AR.
+  final VestidorApiService _vestidorApi = VestidorApiService();
+
+  bool _cargandoConfig = false;
+  String? _resumenConfig;
 
   @override
   void initState() {
@@ -90,7 +113,7 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
     // Sin vista nativa (iOS/escritorio/web) no hace falta permiso: la propia
     // pantalla de cámara explica que solo está disponible en Android.
     if (!_esAndroid) {
-      _irACamara();
+      await _cargarConfiguracionE2E();
       return;
     }
 
@@ -108,7 +131,7 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
     setState(() => _solicitandoPermiso = false);
 
     if (CameraPermissionService.estaConcedido(estado)) {
-      _irACamara();
+      await _cargarConfiguracionE2E();
       return;
     }
 
@@ -119,10 +142,83 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
     });
   }
 
-  void _irACamara() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const CamaraVestidorPage()));
+  /// LAUNCHER TEMPORAL E2E (Etapa 6): pide al backend UNA configuración real del
+  /// producto de prueba y abre el motor AR con ella.
+  ///
+  /// El motor (`CamaraVestidorPage`) NO hace requests: recibe el DTO ya resuelto.
+  /// Esta llamada puede hacer HTTP porque está FUERA del motor.
+  Future<void> _cargarConfiguracionE2E() async {
+    if (_cargandoConfig) return;
+    setState(() {
+      _cargandoConfig = true;
+      _resumenConfig = null;
+    });
+
+    try {
+      final VestidorConfiguracionesResponse respuesta = await _vestidorApi
+          .obtenerConfiguraciones(productoId: productoIdPruebaE2E);
+      final VestidorConfig? config = _elegirConfiguracionE2E(respuesta);
+      if (!mounted) return;
+
+      if (config == null) {
+        setState(() => _cargandoConfig = false);
+        _mostrarAviso(
+          'La prenda de prueba (producto $productoIdPruebaE2E) no tiene una '
+          'configuración de vestidor compatible.',
+        );
+        return;
+      }
+
+      setState(() {
+        _cargandoConfig = false;
+        _resumenConfig =
+            'Prueba E2E: producto ${config.productoId} · config '
+            '${config.configuracionId} · ${config.colorEtiqueta}';
+      });
+      _irACamara(config);
+    } on VestidorApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _cargandoConfig = false);
+      _mostrarAviso(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cargandoConfig = false);
+      _mostrarAviso('No pudimos preparar la prenda de prueba.');
+    }
+  }
+
+  /// Elige la configuración de prueba: prefiere la 56 si es usable y de torso.
+  VestidorConfig? _elegirConfiguracionE2E(
+    VestidorConfiguracionesResponse respuesta,
+  ) {
+    for (final VestidorConfig config in respuesta.configuraciones) {
+      if (config.configuracionId == configuracionIdPreferidaE2E &&
+          config.esUsable &&
+          config.esTorso) {
+        return config;
+      }
+    }
+    for (final VestidorConfig config in respuesta.configuraciones) {
+      if (config.esUsable && config.esTorso) return config;
+    }
+    return respuesta.primeraUsable;
+  }
+
+  /// Aviso discreto (SnackBar) para los errores del launcher de prueba.
+  void _mostrarAviso(String mensaje) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(mensaje), duration: const Duration(seconds: 4)),
+      );
+  }
+
+  void _irACamara(VestidorConfig configuracion) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CamaraVestidorPage(configuracion: configuracion),
+      ),
+    );
   }
 
   /// Abre los Ajustes del sistema para desbloquear el permiso.
@@ -208,9 +304,23 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
                 BotonGradiente(
                   label: 'INICIAR VESTIDOR',
                   icon: Icons.camera_alt_rounded,
-                  isLoading: _solicitandoPermiso,
-                  onPressed: _solicitandoPermiso ? null : _abrirCamara,
+                  isLoading: _solicitandoPermiso || _cargandoConfig,
+                  onPressed: (_solicitandoPermiso || _cargandoConfig)
+                      ? null
+                      : _abrirCamara,
                 ),
+                if (_resumenConfig != null) ...<Widget>[
+                  const SizedBox(height: 10),
+                  Text(
+                    _resumenConfig!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
                 if (_mensajePermiso != null) ...<Widget>[
                   const SizedBox(height: 16),
                   _MensajePermiso(
