@@ -25,6 +25,12 @@ class ApiConfig {
   /// personal (`/auth/personal/login`).
   static String get clientesLoginUrl => '$baseUrl/auth/clientes/login';
 
+  /// Endpoint PÚBLICO de registro de cuenta de CLIENTE (no requiere JWT).
+  ///
+  /// Devuelve 201 con la cuenta creada y **sin** token: el cliente inicia
+  /// sesión después con [clientesLoginUrl].
+  static String get clientesRegistroUrl => '$baseUrl/auth/clientes/registro';
+
   /// Endpoint para obtener el usuario autenticado actual.
   static String get authMeUrl => '$baseUrl/auth/me';
 
@@ -68,14 +74,9 @@ class ApiConfig {
   // Asistencia Inteligente (requiere JWT de contexto cliente)
   // ---------------------------------------------------------------------------
 
-  /// Endpoint de recomendaciones basadas en el catálogo e inventario reales.
-  ///
-  /// La IA (OpenAI/DeepSeek) solo selecciona/rankea candidatos reales: la app
-  /// nunca envía ni recibe claves de IA. La `API key` vive solo en el backend.
   static String get asistenciaRecomendacionesUrl =>
       asistenciaRecomendacionesUrlDesde(baseUrl);
 
-  /// Endpoint de recomendaciones para una URL base dada (inyección en pruebas).
   static String asistenciaRecomendacionesUrlDesde(String base) =>
       '$base/asistencia-inteligente/recomendaciones';
 
@@ -136,50 +137,79 @@ class ApiConfig {
       '$base/pagos/stripe/ventas/$ventaId/estado';
 
   // ---------------------------------------------------------------------------
+  // CU23 - Comprobante de venta del CLIENTE (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint del comprobante de una venta (`GET`, solo lectura).
+  ///
+  /// El backend valida que la venta sea del cliente autenticado, que esté
+  /// COMPLETADA y que tenga un pago APROBADO; devuelve el comprobante ya
+  /// construido. No persiste nada.
+  static String comprobanteVentaUrl(int ventaId) =>
+      comprobanteVentaUrlDesde(baseUrl, ventaId);
+
+  /// Endpoint del comprobante para una URL base dada.
+  ///
+  /// Se parametriza para poder probar el servicio sin depender de
+  /// `--dart-define=API_BASE_URL`.
+  static String comprobanteVentaUrlDesde(String base, int ventaId) =>
+      '$base/ventas/$ventaId/comprobante';
+
+  // ---------------------------------------------------------------------------
+  // CU24 - Historial de compras del CLIENTE (requiere JWT de contexto cliente)
+  // ---------------------------------------------------------------------------
+
+  /// Endpoint del historial paginado del cliente autenticado (`GET`).
+  ///
+  /// El backend identifica al cliente por el JWT: la app nunca envía
+  /// `cliente_id`.
+  static String get historialComprasUrl => historialComprasUrlDesde(baseUrl);
+
+  /// Endpoint del historial para una URL base dada.
+  ///
+  /// Se parametriza para poder probar el servicio sin depender de
+  /// `--dart-define=API_BASE_URL`.
+  static String historialComprasUrlDesde(String base) =>
+      '$base/ventas/historial';
+
+  /// Endpoint del detalle de una compra del historial (`GET`).
+  static String historialCompraDetalleUrl(int ventaId) =>
+      historialCompraDetalleUrlDesde(baseUrl, ventaId);
+
+  /// Endpoint del detalle para una URL base dada.
+  static String historialCompraDetalleUrlDesde(String base, int ventaId) =>
+      '$base/ventas/historial/$ventaId';
+
+  // ---------------------------------------------------------------------------
   // CU26 - Vestidor virtual AR del CLIENTE (requiere JWT de contexto cliente)
   // ---------------------------------------------------------------------------
-  //
-  // El backend solo entrega metadatos (asset PNG transparente, factores y
-  // offsets de anclaje al torso). La detección corporal ocurre 100% local en el
-  // teléfono (motor CameraX + MediaPipe de Harold); estas rutas no procesan
-  // frames ni imágenes de cámara.
 
-  /// Configuraciones AR compatibles de un producto (`GET`).
   static String vestidorConfiguracionesUrl(int productoId) =>
       vestidorConfiguracionesUrlDesde(baseUrl, productoId);
 
-  /// Configuraciones AR de un producto para una URL base dada.
   static String vestidorConfiguracionesUrlDesde(String base, int productoId) =>
       '$base/vestidor-virtual/productos/$productoId/configuraciones';
 
-  /// Creación de sesión de vestidor (`POST`).
   static String get vestidorSesionesUrl => vestidorSesionesUrlDesde(baseUrl);
 
-  /// Creación de sesión para una URL base dada.
   static String vestidorSesionesUrlDesde(String base) =>
       '$base/vestidor-virtual/sesiones';
 
-  /// Registro de inicio de prueba dentro de una sesión (`POST`).
   static String vestidorSesionPruebasUrl(int sesionId) =>
       vestidorSesionPruebasUrlDesde(baseUrl, sesionId);
 
-  /// Registro de inicio de prueba para una URL base dada.
   static String vestidorSesionPruebasUrlDesde(String base, int sesionId) =>
       '$base/vestidor-virtual/sesiones/$sesionId/pruebas';
 
-  /// Finalización de una prueba (`PATCH`).
   static String vestidorPruebaFinalizarUrl(int pruebaId) =>
       vestidorPruebaFinalizarUrlDesde(baseUrl, pruebaId);
 
-  /// Finalización de una prueba para una URL base dada.
   static String vestidorPruebaFinalizarUrlDesde(String base, int pruebaId) =>
       '$base/vestidor-virtual/pruebas/$pruebaId/finalizar';
 
-  /// Finalización de una sesión (`PATCH`).
   static String vestidorSesionFinalizarUrl(int sesionId) =>
       vestidorSesionFinalizarUrlDesde(baseUrl, sesionId);
 
-  /// Finalización de una sesión para una URL base dada.
   static String vestidorSesionFinalizarUrlDesde(String base, int sesionId) =>
       '$base/vestidor-virtual/sesiones/$sesionId/finalizar';
 

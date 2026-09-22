@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../inicio/pages/main_navigation_page.dart';
 import '../../services/auth_service.dart';
+import '../registro/registro_cliente_page.dart';
 
 /// Pantalla de inicio de sesión premium del CLIENTE de VANTER MEN.
 ///
@@ -62,6 +63,29 @@ class _LoginPageState extends State<LoginPage> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Abre el registro público de cliente (CU de registro) en una pantalla
+  /// propia y precarga el correo devuelto.
+  ///
+  /// La contraseña NUNCA viaja entre pantallas: solo se recibe el correo para
+  /// que el cliente escriba su contraseña aquí.
+  Future<void> _abrirRegistro() async {
+    if (_isLoading) return;
+
+    final String? correo = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const RegistroClientePage(),
+      ),
+    );
+    if (!mounted) return;
+    if (correo == null || correo.trim().isEmpty) return;
+
+    setState(() {
+      _correoController.text = correo.trim();
+      _passwordController.clear();
+      _errorMessage = null;
+    });
   }
 
   void _mostrarProximamente() {
@@ -294,7 +318,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         const SizedBox(height: 14),
         OutlinedButton(
-          onPressed: _isLoading ? null : _mostrarProximamente,
+          onPressed: _isLoading ? null : _abrirRegistro,
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.textPrimary,
             side: const BorderSide(color: AppColors.border),

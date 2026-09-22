@@ -461,16 +461,28 @@ void main() {
       MaterialApp(
         theme: ThemeData.dark(),
         navigatorObservers: <NavigatorObserver>[observer],
-        home: const InicioPage(),
+        home: InicioPage(
+          onExplorarCatalogo: () {},
+          onVerCarrito: () {},
+          onVerReservas: () {},
+          onVerCompras: () {},
+        ),
       ),
     );
+
     await tester.pump();
     observer.pushed.clear();
 
-    await tester.ensureVisible(find.text('Asistencia Inteligente'));
-    await tester.tap(find.text('Asistencia Inteligente'));
-    await tester.pump();
-    await tester.pump();
+    final Finder asistenciaCta = find.text('Asistencia Inteligente');
+
+    await tester.scrollUntilVisible(
+      asistenciaCta,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.tap(asistenciaCta);
+    await tester.pumpAndSettle();
 
     expect(find.byType(AsistenciaInteligentePage), findsOneWidget);
   });

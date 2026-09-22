@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-
+import '../../vestidor_virtual/pages/vestidor_virtual_page.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../autenticacion_seguridad/pages/login/login_page.dart';
 import '../../autenticacion_seguridad/services/auth_service.dart';
 import '../../carrito/pages/carritos_page.dart';
 import '../../catalogo/pages/catalogo_page.dart';
 import '../../reservas/pages/reservas_page.dart';
-import '../../vestidor_virtual/pages/vestidor_virtual_page.dart';
+import '../../ventas/pages/historial_compras_page.dart';
 import 'inicio_page.dart';
 
 /// Contenedor principal del CLIENTE autenticado.
@@ -38,7 +38,12 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
 
   /// Secciones de la navegación inferior (Inicio es la inicial).
   late final List<Widget> _secciones = <Widget>[
-    const InicioPage(),
+    InicioPage(
+      onExplorarCatalogo: () => _irATab(_tabCatalogo),
+      onVerCarrito: () => _irATab(_tabCarrito),
+      onVerReservas: _abrirReservas,
+      onVerCompras: _abrirHistorialCompras,
+    ),
     const CatalogoPage(),
     const VestidorVirtualPage(),
     CarritosPage(
@@ -58,6 +63,24 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     if (index == _tabCarrito) {
       _carritoKey.currentState?.recargar();
     }
+  }
+
+  /// Abre el historial de reservas reutilizando la pantalla existente (CU16).
+  void _abrirReservas() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReservasPage(onVerCarrito: () => _irATab(_tabCarrito)),
+      ),
+    );
+  }
+
+  /// Abre el historial de compras reutilizando la pantalla existente (CU24).
+  void _abrirHistorialCompras() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const HistorialComprasPage(),
+      ),
+    );
   }
 
   @override
@@ -122,6 +145,9 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     );
   }
 }
+
+
+
 /// Opción táctil del perfil.
 class _OpcionPerfil extends StatelessWidget {
   const _OpcionPerfil({
@@ -242,6 +268,15 @@ class _PerfilPlaceholderPageState extends State<_PerfilPlaceholderPage> {
     );
   }
 
+  /// CU24 – Abre el historial de compras del cliente autenticado.
+  void _abrirHistorialCompras() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const HistorialComprasPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -329,6 +364,14 @@ class _PerfilPlaceholderPageState extends State<_PerfilPlaceholderPage> {
                   subtitulo: 'Consulta y administra tus reservas de prendas.',
                   onTap: _abrirReservas,
                 ),
+                const SizedBox(height: 12),
+                _OpcionPerfil(
+                  icon: Icons.receipt_long_rounded,
+                  titulo: 'Mis compras',
+                  subtitulo:
+                      'Consulta tu historial y los detalles de tus compras.',
+                  onTap: _abrirHistorialCompras,
+                ),
                 const SizedBox(height: 28),
                 OutlinedButton.icon(
                   onPressed: _cerrandoSesion ? null : _cerrarSesion,
@@ -365,5 +408,3 @@ class _PerfilPlaceholderPageState extends State<_PerfilPlaceholderPage> {
     );
   }
 }
-
-
