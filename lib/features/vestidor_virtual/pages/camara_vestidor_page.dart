@@ -8,6 +8,7 @@ import '../../carrito/widgets/boton_gradiente.dart';
 import '../models/pose_detection_result.dart';
 import '../models/pose_landmark.dart';
 import '../models/torso_anchor.dart';
+import '../models/vestidor_config_model.dart';
 import '../services/camera_permission_service.dart';
 import '../services/pose_landmark_stream_service.dart';
 import '../services/pose_smoothing_service.dart';
@@ -15,6 +16,7 @@ import '../services/pose_validator.dart';
 import '../services/torso_anchor_service.dart';
 import '../widgets/pose_camera_view.dart';
 import '../widgets/pose_overlay.dart';
+import '../widgets/prenda_overlay.dart';
 import '../widgets/torso_anchor_overlay.dart';
 
 /// Índices mostrados en el diagnóstico temporal (11 y 12 = hombros).
@@ -24,14 +26,23 @@ const int _hombroDerecho = 12;
 /// Color usado para indicar detección correcta.
 const Color _verdeOk = Color(0xFF32C48D);
 
-/// CU26 – Vestidor Virtual (Etapa 4): pose validada y estabilizada.
+/// CU26 – Vestidor Virtual (Etapas 4-6): cámara + pose + prenda 2D.
 ///
 /// La cámara (CameraX) y la inferencia (MediaPipe LIVE_STREAM) viven en la vista
 /// nativa. Aquí los landmarks crudos pasan por `PoseValidator` (¿sirve para
-/// prendas?) y, solo si la pose es válida, por `PoseSmoothingService` (EMA); el
-/// resultado estabilizado es lo que dibuja `PoseOverlay`. Todavía NO hay prendas.
+/// prendas?) y, solo si la pose es válida, por `PoseSmoothingService` (EMA); con
+/// el resultado estabilizado se calcula el `TorsoAnchor` y, a partir de él y de
+/// la `VestidorConfig`, la geometría de la prenda.
+///
+/// El motor NO hace requests de negocio: la configuración ya llega resuelta y la
+/// única red es la descarga visual del PNG del asset.
 class CamaraVestidorPage extends StatefulWidget {
-  const CamaraVestidorPage({super.key});
+  /// Crea la pantalla del vestidor con la configuración AR del producto.
+  const CamaraVestidorPage({super.key, required this.configuracion});
+
+  /// Configuración AR del producto (contrato CU26): `assetUrl`, factores,
+  /// offsets, rotación y opacidad. Nunca se hardcodea aquí.
+  final VestidorConfig configuracion;
 
   @override
   State<CamaraVestidorPage> createState() => _CamaraVestidorPageState();
@@ -206,6 +217,18 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
   bool get _mostrarCamara =>
       !_esAndroid || CameraPermissionService.estaConcedido(_permiso);
 
+  /// `true` cuando la configuración permite renderizar la prenda.
+  ///
+  /// Se valida ANTES de renderizar: si no es utilizable se muestra un estado
+  /// controlado y no se rompe la cámara.
+  bool get _configuracionUsable {
+    final VestidorConfig config = widget.configuracion;
+    return config.tieneAsset && config.esPng2d && config.esTorso;
+  }
+
+  /// Motor operativo: configuración usable + cámara construida.
+  bool get _operativo => _configuracionUsable && _mostrarCamara;
+
   /// Consulta el permiso sin abrir diálogos (initState y regreso de Ajustes).
   Future<void> _verificarPermiso() async {
     if (!_esAndroid) {
@@ -258,6 +281,7 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
     // Con el permiso concedido (o en plataformas sin vista nativa) se muestra
     // el vestidor; si falta el permiso NO se construye ninguna vista de cámara.
     final bool mostrarCamara = _mostrarCamara;
+    final bool operativo = _operativo;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -281,18 +305,37 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
             // La vista nativa (CameraX + MediaPipe) SOLO se construye cuando el
             // permiso de cámara está concedido: CameraX nunca intenta abrir la
             // cámara sin permiso.
-            if (mostrarCamara)
+            // Configuración no usable: estado controlado, jamás se construye la
+            // cámara (no se rompe CameraX).
+            if (!_configuracionUsable)
+              Positioned.fill(child: _buildConfiguracionNoUsable())
+            else if (mostrarCamara)
               const Positioned.fill(child: PoseCameraView())
             else
               Positioned.fill(child: _buildPermisoPendiente()),
+            // ETAPA 6: PRENDA PNG sobre el torso. Se mantiene MONTADA aunque se
+            // pierda la pose (con `anchor: null`) para conservar la imagen ya
+            // descargada: al recuperar la pose se dibuja al instante y sin
+            // volver a pedir el PNG.
+            if (operativo)
+              Positioned.fill(
+                child: PrendaOverlay(
+                  anchor: _torso,
+                  configuracion: widget.configuracion,
+                  imageWidth: resultado?.imageWidth ?? 0,
+                  imageHeight: resultado?.imageHeight ?? 0,
+                ),
+              ),
+            // ---- Overlays de DIAGNÓSTICO (se pueden desactivar sin tocar el
+            // motor: basta con no montarlos; el motor no depende de ellos) ----
             // Esqueleto de DIAGNÓSTICO: se dibuja siempre que MediaPipe detecte
             // pose, aunque el vestidor todavía no la considere utilizable. Solo
             // desaparece tras varios frames seguidos sin detección (histéresis).
-            if (mostrarCamara && resultado != null && resultado.poseDetected)
+            if (operativo && resultado != null && resultado.poseDetected)
               Positioned.fill(child: PoseOverlay(resultado: resultado)),
-            // Etapa 5: rectángulo de DIAGNÓSTICO del torso, calculado con los
-            // landmarks ya suavizados. Todavía NO hay prenda.
-            if (mostrarCamara &&
+            // Etapa 5: rectángulo de DIAGNÓSTICO del torso (ancla base con su
+            // propio margen de 1.15, ajeno a los factores de la configuración).
+            if (operativo &&
                 resultado != null &&
                 resultado.poseDetected &&
                 _torso != null)
@@ -304,7 +347,7 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
                 ),
               ),
             // Diagnóstico de pose y controles: solo con la cámara activa.
-            if (mostrarCamara)
+            if (operativo)
               Positioned(
                 left: 20,
                 right: 20,
@@ -315,11 +358,12 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
                     resultado: _resultado,
                     estado: _estadoPose,
                     motivo: _motivoPose,
+                    anchor: _torso,
                     conError: _streamConError,
                   ),
                 ),
               ),
-            if (mostrarCamara)
+            if (operativo)
               Positioned(
                 left: 20,
                 right: 20,
@@ -348,6 +392,78 @@ class _CamaraVestidorPageState extends State<CamaraVestidorPage>
                   ],
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Estado controlado cuando la configuración AR no es utilizable.
+  ///
+  /// No se construye la cámara: CameraX/MediaPipe quedan intactos y el cliente
+  /// ve un mensaje claro en lugar de una pantalla rota.
+  Widget _buildConfiguracionNoUsable() {
+    final VestidorConfig config = widget.configuracion;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              height: 72,
+              width: 72,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(
+                Icons.checkroom_rounded,
+                color: AppColors.primary,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 22),
+            const Text(
+              'PRENDA NO DISPONIBLE',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Esta prenda todavía no tiene un recurso de vestidor virtual '
+              'compatible (PNG 2D sobre el torso).',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: Colors.white70,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Producto ${config.productoId} · Configuración '
+              '${config.configuracionId} · ${config.tipoAsset} · '
+              '${config.zonaCuerpo}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                height: 1.45,
+                color: Colors.white54,
+              ),
+            ),
+            const SizedBox(height: 24),
+            BotonGradiente(
+              label: 'VOLVER',
+              icon: Icons.arrow_back_rounded,
+              onPressed: _volver,
+            ),
           ],
         ),
       ),
@@ -513,6 +629,7 @@ class _DiagnosticoPose extends StatelessWidget {
     required this.resultado,
     required this.estado,
     this.motivo,
+    this.anchor,
     this.conError = false,
   });
 
@@ -521,6 +638,9 @@ class _DiagnosticoPose extends StatelessWidget {
 
   /// Motivo técnico del último rechazo del validador (solo diagnóstico).
   final String? motivo;
+
+  /// Ancla vigente (DEBUG): permite comparar espalda vs frente en el teléfono.
+  final TorsoAnchor? anchor;
 
   final bool conError;
 
@@ -599,6 +719,16 @@ class _DiagnosticoPose extends StatelessWidget {
             Text(_linea('H11', 'hombro izq', hombroIzq), style: _estiloDetalle),
             const SizedBox(height: 2),
             Text(_linea('H12', 'hombro der', hombroDer), style: _estiloDetalle),
+          ],
+          // DEBUG Etapa 6: geometría del ancla para comparar espalda vs frente.
+          if (detectada && anchor != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Anchor: ancho ${anchor!.shoulderWidth.toStringAsFixed(3)} · '
+              'alto ${anchor!.torsoHeight.toStringAsFixed(3)} · '
+              'rot ${anchor!.rotationGrados.toStringAsFixed(1)}°',
+              style: _estiloDetalle,
+            ),
           ],
           if (detectada && !lista && tecnico != null && tecnico.isNotEmpty) ...[
             const SizedBox(height: 4),
