@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../carrito/widgets/boton_gradiente.dart';
+import '../services/camera_permission_service.dart';
 import '../services/pose_landmarker_service.dart';
 import 'camara_vestidor_page.dart';
 
@@ -28,6 +30,13 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
 
   _EstadoMediaPipe _estado = _EstadoMediaPipe.inicializando;
   String? _detalleError;
+
+  /// Permiso de cámara en runtime (CU26): la cámara no se abre sin él.
+  final CameraPermissionService _permisos = const CameraPermissionService();
+
+  bool _solicitandoPermiso = false;
+  String? _mensajePermiso;
+  bool _permisoBloqueado = false;
 
   @override
   void initState() {
@@ -66,10 +75,59 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
     }
   }
 
-  void _abrirCamara() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const CamaraVestidorPage()),
-    );
+  /// `true` solo en Android, donde existe la vista nativa de cámara (CameraX).
+  bool get _esAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Abre el vestidor SOLO cuando el permiso de cámara está concedido.
+  ///
+  /// Si no lo está, se solicita en este punto; si el cliente rechaza, la cámara
+  /// NO se abre y se muestra un mensaje controlado (con acceso a los Ajustes
+  /// cuando el rechazo es permanente).
+  Future<void> _abrirCamara() async {
+    if (_solicitandoPermiso) return;
+
+    // Sin vista nativa (iOS/escritorio/web) no hace falta permiso: la propia
+    // pantalla de cámara explica que solo está disponible en Android.
+    if (!_esAndroid) {
+      _irACamara();
+      return;
+    }
+
+    setState(() {
+      _solicitandoPermiso = true;
+      _mensajePermiso = null;
+      _permisoBloqueado = false;
+    });
+
+    EstadoPermisoCamara estado = await _permisos.verificar();
+    if (!CameraPermissionService.estaConcedido(estado)) {
+      estado = await _permisos.solicitar();
+    }
+    if (!mounted) return;
+    setState(() => _solicitandoPermiso = false);
+
+    if (CameraPermissionService.estaConcedido(estado)) {
+      _irACamara();
+      return;
+    }
+
+    setState(() {
+      _mensajePermiso =
+          'Se necesita permiso de cámara para utilizar el vestidor virtual.';
+      _permisoBloqueado = estado == EstadoPermisoCamara.denegadoPermanente;
+    });
+  }
+
+  void _irACamara() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const CamaraVestidorPage()));
+  }
+
+  /// Abre los Ajustes del sistema para desbloquear el permiso.
+  Future<void> _abrirAjustesPermiso() async {
+    await _permisos.abrirAjustes();
   }
 
   @override
@@ -145,16 +203,22 @@ class _VestidorVirtualPageState extends State<VestidorVirtualPage> {
                 const SizedBox(height: 20),
                 // Diagnóstico temporal (desarrollo): se eliminará cuando la
                 // Etapa 2 complete la detección de pose.
-                _DiagnosticoMediaPipe(
-                  estado: _estado,
-                  detalle: _detalleError,
-                ),
+                _DiagnosticoMediaPipe(estado: _estado, detalle: _detalleError),
                 const SizedBox(height: 24),
                 BotonGradiente(
                   label: 'INICIAR VESTIDOR',
                   icon: Icons.camera_alt_rounded,
-                  onPressed: _abrirCamara,
+                  isLoading: _solicitandoPermiso,
+                  onPressed: _solicitandoPermiso ? null : _abrirCamara,
                 ),
+                if (_mensajePermiso != null) ...<Widget>[
+                  const SizedBox(height: 16),
+                  _MensajePermiso(
+                    mensaje: _mensajePermiso!,
+                    mostrarAjustes: _permisoBloqueado,
+                    onAbrirAjustes: _abrirAjustesPermiso,
+                  ),
+                ],
               ],
             ),
           ),
@@ -254,5 +318,89 @@ class _DiagnosticoMediaPipe extends StatelessWidget {
   static String _recortar(String valor) {
     if (valor.length <= 240) return valor;
     return '${valor.substring(0, 237)}...';
+  }
+}
+
+/// Mensaje controlado cuando el permiso de cámara fue rechazado.
+///
+/// No abre la cámara: solo explica la situación y, si el permiso quedó
+/// bloqueado, ofrece ir a los Ajustes de la aplicación.
+class _MensajePermiso extends StatelessWidget {
+  const _MensajePermiso({
+    required this.mensaje,
+    required this.mostrarAjustes,
+    required this.onAbrirAjustes,
+  });
+
+  final String mensaje;
+
+  /// `true` cuando el permiso quedó bloqueado (solo se corrige en Ajustes).
+  final bool mostrarAjustes;
+
+  final VoidCallback onAbrirAjustes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Icon(
+                Icons.no_photography_rounded,
+                color: AppColors.error,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  mensaje,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (mostrarAjustes) ...<Widget>[
+            const SizedBox(height: 10),
+            const Text(
+              'El permiso está bloqueado: actívalo desde los Ajustes de la '
+              'aplicación.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.45,
+                color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: onAbrirAjustes,
+              icon: const Icon(Icons.settings_rounded, size: 18),
+              label: const Text('ABRIR AJUSTES'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+                minimumSize: const Size.fromHeight(46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
