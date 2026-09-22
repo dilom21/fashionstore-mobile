@@ -43,29 +43,49 @@ class PoseValidation {
 
 /// Comprueba que exista una geometría corporal suficiente para el vestidor.
 ///
-/// No pretende decidir si hay un "humano" (no hay IA adicional): solo verifica
-/// que los cuatro puntos que necesitan las prendas superiores (hombros 11/12 y
-/// caderas 23/24) sean fiables y coherentes.
+/// **Separación de responsabilidades (Etapa 4 corregida):** este validador NO
+/// decide si MediaPipe puede dibujar el esqueleto. MediaPipe manda sobre la
+/// DETECCIÓN (`poseDetected`) y el esqueleto de diagnóstico se dibuja siempre
+/// que haya pose; esto solo decide si la pose es **utilizable para una prenda**
+/// (hombros/torso fiables), que es lo que la UI muestra como "Pose lista".
+///
+/// No pretende decidir si hay un "humano" (no hay IA adicional): usar
+/// thresholds para intentar bloquear objetos con geometría humanoide acaba
+/// rechazando personas reales. La prioridad es no rechazar personas.
 ///
 /// Todos los umbrales son constantes documentadas y ajustables desde el
-/// constructor; los valores por defecto son deliberadamente permisivos para no
-/// perjudicar a personas parcialmente visibles, con poca luz o con cámaras de
-/// menor calidad (los thresholds nativos de MediaPipe NO se han tocado).
+/// constructor (los thresholds nativos de MediaPipe NO se han tocado).
 class PoseValidator {
   const PoseValidator({
-    this.minVisibilidad = minVisibilidadPorDefecto,
-    this.minPresencia = minPresenciaPorDefecto,
+    this.minVisibilidadHombros = minVisibilidadHombrosPorDefecto,
+    this.minPresenciaHombros = minPresenciaHombrosPorDefecto,
+    this.minVisibilidadCaderas = minVisibilidadCaderasPorDefecto,
+    this.minPresenciaCaderas = minPresenciaCaderasPorDefecto,
+    this.toleranciaBordeHombros = toleranciaBordeHombrosPorDefecto,
+    this.toleranciaBordeCaderas = toleranciaBordeCaderasPorDefecto,
     this.minDistanciaHombros = minDistanciaHombrosPorDefecto,
     this.minDistanciaTorso = minDistanciaTorsoPorDefecto,
     this.minSeparacionHombros = minSeparacionHombrosPorDefecto,
     this.minSeparacionCaderas = minSeparacionCaderasPorDefecto,
   });
 
-  /// Visibilidad mínima de cada punto clave (0..1).
-  static const double minVisibilidadPorDefecto = 0.60;
+  /// Visibilidad mínima de los HOMBROS, que son el anclaje de las prendas
+  /// superiores y por tanto el requisito principal.
+  ///
+  /// Calibrado con log real en teléfono: hombros útiles aparecían entre 0.45 y
+  /// 0.59, así que el 0.60 anterior rechazaba personas perfectamente válidas.
+  static const double minVisibilidadHombrosPorDefecto = 0.45;
 
-  /// Presencia mínima de cada punto clave (0..1).
-  static const double minPresenciaPorDefecto = 0.60;
+  /// Presencia mínima de los HOMBROS (misma justificación que la visibilidad).
+  static const double minPresenciaHombrosPorDefecto = 0.45;
+
+  /// Visibilidad mínima de las CADERAS: son apoyo (encuadre/escala) y suelen
+  /// quedar parcialmente visibles, por eso el umbral es más bajo que el de los
+  /// hombros y no se exigen ambas.
+  static const double minVisibilidadCaderasPorDefecto = 0.25;
+
+  /// Presencia mínima de las CADERAS (misma justificación).
+  static const double minPresenciaCaderasPorDefecto = 0.25;
 
   /// Distancia mínima entre hombros, en coordenadas normalizadas. Si es menor,
   /// la persona está demasiado lejos (o la detección es degenerada).
@@ -82,18 +102,33 @@ class PoseValidator {
   /// Separación mínima entre caderas (mismo criterio que los hombros).
   static const double minSeparacionCaderasPorDefecto = 0.02;
 
-  /// Rango aceptado para x/y (los puntos fuera del cuadro no sirven).
-  static const double rangoMinimo = 0.0;
-  static const double rangoMaximo = 1.0;
+  /// Banda tolerante alrededor del cuadro para los HOMBROS.
+  ///
+  /// MediaPipe estima x/y ligeramente fuera de 0..1 cuando una articulación
+  /// está justo en el borde; rechazar la pose completa por eso hacía
+  /// desaparecer el esqueleto. 0.10 = 10 % del cuadro a cada lado.
+  static const double toleranciaBordeHombrosPorDefecto = 0.10;
 
-  final double minVisibilidad;
-  final double minPresencia;
+  /// Banda tolerante para las CADERAS, más amplia porque pueden estar
+  /// parcialmente fuera del cuadro (persona algo cerca) sin invalidar el torso.
+  static const double toleranciaBordeCaderasPorDefecto = 0.20;
+
+  final double minVisibilidadHombros;
+  final double minPresenciaHombros;
+  final double minVisibilidadCaderas;
+  final double minPresenciaCaderas;
+  final double toleranciaBordeHombros;
+  final double toleranciaBordeCaderas;
   final double minDistanciaHombros;
   final double minDistanciaTorso;
   final double minSeparacionHombros;
   final double minSeparacionCaderas;
 
   /// Valida el frame y devuelve el estado que usará el vestidor.
+  ///
+  /// NO decide si MediaPipe puede dibujar el esqueleto: eso depende solo de
+  /// `poseDetected`. Aquí se decide únicamente si la pose sirve para colocar
+  /// una prenda ("Pose lista").
   PoseValidation validar(PoseDetectionResult resultado) {
     if (!resultado.poseDetected) {
       return const PoseValidation(
@@ -107,28 +142,51 @@ class PoseValidator {
     final PoseLandmark? caderaIzq = resultado.porIndice(indiceCaderaIzquierda);
     final PoseLandmark? caderaDer = resultado.porIndice(indiceCaderaDerecha);
 
-    if (hombroIzq == null ||
-        hombroDer == null ||
-        caderaIzq == null ||
-        caderaDer == null) {
+    // Los HOMBROS son el anclaje de las prendas superiores: se exigen ambos.
+    if (hombroIzq == null || hombroDer == null) {
       return const PoseValidation(
         EstadoPose.insuficiente,
-        motivo: 'Faltan hombros o caderas.',
+        motivo: 'Faltan los hombros.',
       );
     }
-
-    final Map<String, PoseLandmark> claves = <String, PoseLandmark>{
+    for (final MapEntry<String, PoseLandmark> entrada in <String, PoseLandmark>{
       'hombro izquierdo (11)': hombroIzq,
       'hombro derecho (12)': hombroDer,
-      'cadera izquierda (23)': caderaIzq,
-      'cadera derecha (24)': caderaDer,
-    };
-    for (final MapEntry<String, PoseLandmark> entrada in claves.entries) {
-      final String? problema = _revisarPunto(entrada.value);
+    }.entries) {
+      final String? problema = _revisarPunto(
+        entrada.value,
+        tolerancia: toleranciaBordeHombros,
+        minVisibilidad: minVisibilidadHombros,
+        minPresencia: minPresenciaHombros,
+      );
       if (problema != null) {
         return PoseValidation(
           EstadoPose.insuficiente,
           motivo: '${entrada.key}: $problema',
+        );
+      }
+    }
+
+    // Las CADERAS son apoyo (encuadre/escala): basta con UNA, porque suelen
+    // quedar parcialmente fuera del cuadro si la persona está algo cerca.
+    final List<PoseLandmark> caderas = <PoseLandmark>[?caderaIzq, ?caderaDer];
+    if (caderas.isEmpty) {
+      return const PoseValidation(
+        EstadoPose.insuficiente,
+        motivo: 'Faltan las caderas.',
+      );
+    }
+    for (final PoseLandmark cadera in caderas) {
+      final String? problema = _revisarPunto(
+        cadera,
+        tolerancia: toleranciaBordeCaderas,
+        minVisibilidad: minVisibilidadCaderas,
+        minPresencia: minPresenciaCaderas,
+      );
+      if (problema != null) {
+        return PoseValidation(
+          EstadoPose.insuficiente,
+          motivo: 'cadera (${cadera.index}): $problema',
         );
       }
     }
@@ -146,7 +204,9 @@ class PoseValidator {
         motivo: 'Hombros demasiado juntos (persona muy lejos).',
       );
     }
-    if (_distancia(caderaIzq, caderaDer) < minSeparacionCaderas) {
+    if (caderaIzq != null &&
+        caderaDer != null &&
+        _distancia(caderaIzq, caderaDer) < minSeparacionCaderas) {
       return const PoseValidation(
         EstadoPose.insuficiente,
         motivo: 'Caderas prácticamente en el mismo punto.',
@@ -154,12 +214,17 @@ class PoseValidator {
     }
 
     final double centroHombrosY = (hombroIzq.y + hombroDer.y) / 2;
-    final double centroCaderasY = (caderaIzq.y + caderaDer.y) / 2;
+    double sumaCaderasY = 0;
+    for (final PoseLandmark cadera in caderas) {
+      sumaCaderasY += cadera.y;
+    }
+    final double centroCaderasY = sumaCaderasY / caderas.length;
     final double alturaTorso = centroCaderasY - centroHombrosY;
     if (alturaTorso < minDistanciaTorso) {
       return const PoseValidation(
         EstadoPose.insuficiente,
-        motivo: 'Torso insuficiente (hombros y caderas muy juntos o invertidos).',
+        motivo:
+            'Torso insuficiente (hombros y caderas muy juntos o invertidos).',
       );
     }
 
@@ -167,12 +232,21 @@ class PoseValidator {
   }
 
   /// Motivo por el que un punto no sirve, o `null` si es aceptable.
-  String? _revisarPunto(PoseLandmark punto) {
-    if (punto.x < rangoMinimo ||
-        punto.x > rangoMaximo ||
-        punto.y < rangoMinimo ||
-        punto.y > rangoMaximo) {
-      return 'fuera del cuadro';
+  ///
+  /// [tolerancia] es la banda alrededor del cuadro: un punto puede estar
+  /// ligeramente fuera de 0..1 y seguir siendo válido (nunca se ajusta su
+  /// posición, solo se permite).
+  String? _revisarPunto(
+    PoseLandmark punto, {
+    required double tolerancia,
+    required double minVisibilidad,
+    required double minPresencia,
+  }) {
+    if (punto.x < -tolerancia ||
+        punto.x > 1 + tolerancia ||
+        punto.y < -tolerancia ||
+        punto.y > 1 + tolerancia) {
+      return 'fuera del cuadro (banda ±${tolerancia.toStringAsFixed(2)})';
     }
 
     // Si MediaPipe no informa visibilidad/presencia, el punto no se descarta por

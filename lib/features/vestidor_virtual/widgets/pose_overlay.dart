@@ -1,15 +1,14 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../models/pose_detection_result.dart';
 import '../models/pose_landmark.dart';
+import 'pose_preview_transform.dart';
 
-/// Conexiones del esqueleto: pares de índices de los 33 landmarks de MediaPipe.
+/// Conexiones del esqueleto: pares de Ã­ndices de los 33 landmarks de MediaPipe.
 ///
-/// Cubren cara (básica), torso, brazos y piernas.
+/// Cubren cara (bÃ¡sica), torso, brazos y piernas.
 const List<List<int>> conexionesPose = <List<int>>[
-  // Cara (básica)
+  // Cara (bÃ¡sica)
   <int>[0, 1], <int>[1, 2], <int>[2, 3], <int>[3, 7],
   <int>[0, 4], <int>[4, 5], <int>[5, 6], <int>[6, 8], <int>[9, 10],
   // Torso
@@ -26,34 +25,39 @@ const List<List<int>> conexionesPose = <List<int>>[
   <int>[24, 26], <int>[26, 28], <int>[28, 30], <int>[30, 32], <int>[28, 32],
 ];
 
-/// Overlay que dibuja los 33 landmarks y el esqueleto sobre el preview de cámara.
+/// Overlay que dibuja los 33 landmarks y el esqueleto sobre el preview de cÃ¡mara.
 ///
-/// Se coloca encima de `PoseCameraView` ocupando exactamente su misma área. Las
-/// coordenadas llegan normalizadas respecto de la imagen que analizó MediaPipe
-/// (`imageWidth` × `imageHeight`) y se transforman con la misma matemática que
+/// Se coloca encima de `PoseCameraView` ocupando exactamente su misma Ã¡rea. Las
+/// coordenadas llegan normalizadas respecto de la imagen que analizÃ³ MediaPipe
+/// (`imageWidth` Ã— `imageHeight`) y se transforman con la misma matemÃ¡tica que
 /// `PreviewView.ScaleType.FILL_CENTER`: escalar con `max`, centrar y recortar.
 ///
 /// NO dibuja nada si no hay pose. No aplica suavizado ni filtros.
 class PoseOverlay extends StatelessWidget {
+  /// Crea el overlay.
   const PoseOverlay({
     super.key,
     required this.resultado,
-    this.umbralVisibilidad = 0.5,
+    this.umbralVisibilidad = 0.25,
     this.mostrarIndices = false,
   });
 
   /// Resultado actual de MediaPipe.
   final PoseDetectionResult resultado;
 
-  /// Visibilidad mínima para dibujar un punto o una conexión.
+  /// Visibilidad mÃ­nima para dibujar un punto o una conexiÃ³n.
+  ///
+  /// Bajo a propÃ³sito (0.25): este overlay es de DIAGNÃ“STICO y debe mostrar lo
+  /// que MediaPipe detecta. Que la pose sea o no utilizable para una prenda lo
+  /// decide `PoseValidator`, no el dibujo.
   final double umbralVisibilidad;
 
-  /// Modo debug opcional: dibuja el índice de cada landmark junto al punto.
+  /// Modo debug opcional: dibuja el Ã­ndice de cada landmark junto al punto.
   final bool mostrarIndices;
 
   @override
   Widget build(BuildContext context) {
-    // El overlay nunca debe interceptar gestos de la cámara.
+    // El overlay nunca debe interceptar gestos de la cÃ¡mara.
     return IgnorePointer(
       child: CustomPaint(
         size: Size.infinite,
@@ -71,7 +75,7 @@ class PoseOverlay extends StatelessWidget {
 class PoseOverlayPainter extends CustomPainter {
   PoseOverlayPainter({
     required this.resultado,
-    this.umbralVisibilidad = 0.5,
+    this.umbralVisibilidad = 0.25,
     this.mostrarIndices = false,
   });
 
@@ -79,7 +83,7 @@ class PoseOverlayPainter extends CustomPainter {
   final double umbralVisibilidad;
   final bool mostrarIndices;
 
-  /// Color del esqueleto (mismo verde que el indicador de detección).
+  /// Color del esqueleto (mismo verde que el indicador de detecciÃ³n).
   static const Color _colorEsqueleto = Color(0xFF32C48D);
 
   /// Color del relleno de los puntos (contrasta sobre cualquier imagen).
@@ -98,7 +102,7 @@ class PoseOverlayPainter extends CustomPainter {
     if (anchoImagen <= 0 || altoImagen <= 0) return;
     if (size.width <= 0 || size.height <= 0) return;
 
-    final _TransformacionPose transformacion = _TransformacionPose.calcular(
+    final TransformacionPose transformacion = TransformacionPose.calcular(
       tamanoVista: size,
       anchoImagen: anchoImagen,
       altoImagen: altoImagen,
@@ -121,7 +125,7 @@ class PoseOverlayPainter extends CustomPainter {
     for (final List<int> conexion in conexionesPose) {
       final Offset? inicio = puntos[conexion[0]];
       final Offset? fin = puntos[conexion[1]];
-      // La conexión solo se dibuja si existen ambos extremos dibujables.
+      // La conexiÃ³n solo se dibuja si existen ambos extremos dibujables.
       if (inicio == null || fin == null) continue;
       canvas.drawLine(inicio, fin, lapizLinea);
     }
@@ -143,18 +147,32 @@ class PoseOverlayPainter extends CustomPainter {
     }
   }
 
-  /// Un punto se dibuja si cae dentro del frame y tiene visibilidad suficiente.
+  /// Margen de dibujo alrededor del cuadro.
+  ///
+  /// MediaPipe estima x/y ligeramente fuera de 0..1 cuando una articulaciÃ³n
+  /// estÃ¡ justo en el borde (por ejemplo y = 1.02); sin este margen se perdÃ­a
+  /// ese punto y todas sus conexiones. Fuera de la banda el punto se OMITE:
+  /// NUNCA se ajusta su posiciÃ³n a la pantalla.
+  static const double margenDibujo = 0.05;
+
+  /// Un punto se dibuja si cae dentro del cuadro (con [margenDibujo]) y tiene
+  /// visibilidad suficiente.
   ///
   /// Si `visibility` viene en `null` NO se asume invisible. Los puntos fuera de
   /// la imagen se descartan (no se ajustan a los bordes de la pantalla).
   bool _esDibujable(PoseLandmark punto) {
-    if (punto.x < 0 || punto.x > 1 || punto.y < 0 || punto.y > 1) return false;
+    if (punto.x < -margenDibujo ||
+        punto.x > 1 + margenDibujo ||
+        punto.y < -margenDibujo ||
+        punto.y > 1 + margenDibujo) {
+      return false;
+    }
     final double? visibilidad = punto.visibility;
     if (visibilidad == null) return true;
     return visibilidad >= umbralVisibilidad;
   }
 
-  /// Modo debug: número del índice junto al punto.
+  /// Modo debug: nÃºmero del Ã­ndice junto al punto.
   void _dibujarIndice(Canvas canvas, Offset centro, int indice) {
     final TextPainter texto = TextPainter(
       text: TextSpan(
@@ -175,63 +193,5 @@ class PoseOverlayPainter extends CustomPainter {
     return oldDelegate.resultado != resultado ||
         oldDelegate.umbralVisibilidad != umbralVisibilidad ||
         oldDelegate.mostrarIndices != mostrarIndices;
-  }
-}
-
-/// Transformación de coordenadas normalizadas (frame) → píxeles de pantalla.
-///
-/// Equivale a `BoxFit.cover` / `PreviewView.ScaleType.FILL_CENTER`:
-/// `scale = max(viewW / imageW, viewH / imageH)` y la imagen escalada se centra
-/// en la vista (el sobrante se recorta por igual a ambos lados).
-///
-/// Nota para el futuro: esto es exacto siempre que el stream de análisis y el de
-/// preview compartan relación de aspecto (en CameraX ambos son 4:3 por defecto).
-/// Si no coincidieran, la solución correcta sería exponer desde el lado nativo
-/// la resolución real del preview; NO acumular offsets manuales aquí.
-class _TransformacionPose {
-  const _TransformacionPose({
-    required this.escala,
-    required this.desplazamientoX,
-    required this.desplazamientoY,
-    required this.anchoImagen,
-    required this.altoImagen,
-  });
-
-  final double escala;
-  final double desplazamientoX;
-  final double desplazamientoY;
-  final int anchoImagen;
-  final int altoImagen;
-
-  static _TransformacionPose calcular({
-    required Size tamanoVista,
-    required int anchoImagen,
-    required int altoImagen,
-  }) {
-    final double escalaX = tamanoVista.width / anchoImagen;
-    final double escalaY = tamanoVista.height / altoImagen;
-    final double escala = math.max(escalaX, escalaY);
-    final double anchoEscalado = anchoImagen * escala;
-    final double altoEscalado = altoImagen * escala;
-
-    return _TransformacionPose(
-      escala: escala,
-      desplazamientoX: (tamanoVista.width - anchoEscalado) / 2,
-      desplazamientoY: (tamanoVista.height - altoEscalado) / 2,
-      anchoImagen: anchoImagen,
-      altoImagen: altoImagen,
-    );
-  }
-
-  /// `screenX = offsetX + (x * imageWidth) * scale` (y análogamente en Y).
-  ///
-  /// Las coordenadas llegan tal cual de MediaPipe: la imagen ya fue rotada y
-  /// espejada (solo cámara frontal) en el lado nativo, así que aquí NO se vuelve
-  /// a espejar (`x = 1 - x`).
-  Offset aPantalla(double x, double y) {
-    return Offset(
-      desplazamientoX + x * anchoImagen * escala,
-      desplazamientoY + y * altoImagen * escala,
-    );
   }
 }
