@@ -15,23 +15,23 @@ void main() {
       const String base = 'http://api.test';
       expect(
         ApiConfig.vestidorConfiguracionesUrlDesde(base, 7),
-        'http://api.test/vestidor-virtual/productos/7/configuraciones',
+        'http://api.test/tenant/vestidor-virtual/productos/7/configuraciones',
       );
       expect(
         ApiConfig.vestidorSesionesUrlDesde(base),
-        'http://api.test/vestidor-virtual/sesiones',
+        'http://api.test/tenant/vestidor-virtual/sesiones',
       );
       expect(
         ApiConfig.vestidorSesionPruebasUrlDesde(base, 3),
-        'http://api.test/vestidor-virtual/sesiones/3/pruebas',
+        'http://api.test/tenant/vestidor-virtual/sesiones/3/pruebas',
       );
       expect(
         ApiConfig.vestidorPruebaFinalizarUrlDesde(base, 9),
-        'http://api.test/vestidor-virtual/pruebas/9/finalizar',
+        'http://api.test/tenant/vestidor-virtual/pruebas/9/finalizar',
       );
       expect(
         ApiConfig.vestidorSesionFinalizarUrlDesde(base, 3),
-        'http://api.test/vestidor-virtual/sesiones/3/finalizar',
+        'http://api.test/tenant/vestidor-virtual/sesiones/3/finalizar',
       );
     });
   });
@@ -86,22 +86,19 @@ void main() {
     });
 
     test('color nulo usa etiqueta por defecto', () {
-      final VestidorConfig config = VestidorConfig.fromJson(
-        <String, dynamic>{
-          'configuracion_id': 1,
-          'asset_url': 'https://cdn.test/a.png',
-          'zona_cuerpo': 'TORSO',
-          'tipo_asset': 'PNG_2D',
-          'factor_ancho': 1,
-          'factor_alto': 1,
-          'offset_x': 0,
-          'offset_y': 0,
-          'rotacion_offset': 0,
-          'orden_capa': 1,
-          'opacidad': 1,
-        },
-        productoId: 5,
-      );
+      final VestidorConfig config = VestidorConfig.fromJson(<String, dynamic>{
+        'configuracion_id': 1,
+        'asset_url': 'https://cdn.test/a.png',
+        'zona_cuerpo': 'TORSO',
+        'tipo_asset': 'PNG_2D',
+        'factor_ancho': 1,
+        'factor_alto': 1,
+        'offset_x': 0,
+        'offset_y': 0,
+        'rotacion_offset': 0,
+        'orden_capa': 1,
+        'opacidad': 1,
+      }, productoId: 5);
       expect(config.productoId, 5);
       expect(config.colorId, isNull);
       expect(config.color, isNull);

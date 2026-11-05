@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/config/api_config.dart';
+import '../../../core/offline/local_database.dart';
+import '../../../core/offline/offline_operation.dart';
+import '../../../core/offline/offline_queue.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../models/venta_digital_model.dart';
 
@@ -18,12 +21,14 @@ class VentaDigitalException implements Exception {
     this.statusCode,
     this.unauthorized = false,
     this.conflicto = false,
+    this.queuedOffline = false,
   });
 
   final String message;
   final int? statusCode;
   final bool unauthorized;
   final bool conflicto;
+  final bool queuedOffline;
 
   @override
   String toString() => 'VentaDigitalException($statusCode): $message';
@@ -47,9 +52,13 @@ class VentaDigitalService {
     AuthStorage? storage,
     http.Client? client,
     String? baseUrl,
+    OfflineQueue? queue,
+    LocalDatabase? database,
   }) : _storage = storage ?? AuthStorage(),
        _client = client ?? http.Client(),
-       _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim();
+       _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim(),
+       _queue = queue ?? OfflineQueue(storage: storage, database: database),
+       _database = database ?? LocalDatabase.instance;
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -81,6 +90,8 @@ class VentaDigitalService {
   final AuthStorage _storage;
   final http.Client _client;
   final String _baseUrl;
+  final OfflineQueue _queue;
+  final LocalDatabase _database;
 
   /// Convierte el carrito ACTIVO en una venta digital PENDIENTE
   /// (`POST /ventas/digital`).
@@ -88,11 +99,53 @@ class VentaDigitalService {
   /// Solo se envía `carrito_id` y `canal`: el backend valida el cliente, el
   /// carrito, los items, el stock, la sucursal, los precios y el total.
   Future<VentaDigital> realizarCompra(int carritoId) async {
-    final Object? data = await _enviar(
-      'POST',
-      ApiConfig.ventasDigitalUrlDesde(_baseUrl),
-      body: <String, dynamic>{'carrito_id': carritoId, 'canal': canalMovil},
-    );
+    final Map<String, dynamic> payload = <String, dynamic>{
+      'carrito_id': carritoId,
+      'canal': canalMovil,
+    };
+    OfflineOperation? operation;
+    try {
+      operation = await _queue.add('venta_digital', payload);
+      await _database.updateOperation(
+        operation.operationId,
+        OfflineOperationStatus.enviado,
+        incrementAttempt: true,
+      );
+    } catch (_) {
+      // En pruebas unitarias sin plugin SQLite se conserva el envío online.
+    }
+    final Object? data;
+    try {
+      data = await _enviar(
+        'POST',
+        ApiConfig.ventasDigitalUrlDesde(_baseUrl),
+        body: payload,
+        operationId: operation?.operationId,
+      );
+      if (operation != null) {
+        await _database.updateOperation(
+          operation.operationId,
+          OfflineOperationStatus.confirmado,
+        );
+      }
+    } on VentaDigitalException catch (error) {
+      if (operation != null) {
+        await _database.updateOperation(
+          operation.operationId,
+          error.conflicto
+              ? OfflineOperationStatus.conflicto
+              : OfflineOperationStatus.pendiente,
+          error: error.message,
+        );
+      }
+      if (operation != null && error.statusCode == null) {
+        throw const VentaDigitalException(
+          'Compra guardada sin conexión. Se sincronizará automáticamente.',
+          queuedOffline: true,
+        );
+      }
+      rethrow;
+    }
     if (data is! Map) {
       throw const VentaDigitalException(_unexpectedErrorMessage);
     }
@@ -115,9 +168,11 @@ class VentaDigitalService {
     String metodo,
     String url, {
     Map<String, dynamic>? body,
+    String? operationId,
   }) async {
     _asegurarConfiguracion();
     final Map<String, String> headers = await _headers(conCuerpo: body != null);
+    if (operationId != null) headers['Idempotency-Key'] = operationId;
     final Uri uri = Uri.parse(url);
 
     final http.Response response;

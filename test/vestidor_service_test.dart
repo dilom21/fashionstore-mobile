@@ -105,13 +105,15 @@ void main() {
     expect(capturada.method, 'GET');
     expect(
       capturada.url.toString(),
-      '$_base/vestidor-virtual/productos/1/configuraciones'
+      '$_base/tenant/vestidor-virtual/productos/1/configuraciones'
       '?variante_id=11&color_id=1',
     );
     expect(capturada.headers['Authorization'], 'Bearer jwt-test');
     expect(respuesta.compatible, isTrue);
-    expect(respuesta.configuraciones.single.assetUrl,
-        'https://cdn.test/polo-negro-tryon.png');
+    expect(
+      respuesta.configuraciones.single.assetUrl,
+      'https://cdn.test/polo-negro-tryon.png',
+    );
     expect(respuesta.configuraciones.single.esUsable, isTrue);
   });
 
@@ -126,7 +128,7 @@ void main() {
 
     expect(
       capturada.url.toString(),
-      '$_base/vestidor-virtual/productos/1/configuraciones',
+      '$_base/tenant/vestidor-virtual/productos/1/configuraciones',
     );
   });
 
@@ -140,7 +142,7 @@ void main() {
     final VestidorSesion sesion = await _servicio(client: client).crearSesion();
 
     expect(capturada.method, 'POST');
-    expect(capturada.url.toString(), '$_base/vestidor-virtual/sesiones');
+    expect(capturada.url.toString(), '$_base/tenant/vestidor-virtual/sesiones');
     expect(capturada.headers['Authorization'], 'Bearer jwt-test');
     expect(sesion.sesionId, 4);
     expect(sesion.estaActiva, isTrue);
@@ -153,16 +155,14 @@ void main() {
       return http.Response(jsonEncode(_pruebaJson), 201);
     });
 
-    final VestidorPrueba prueba = await _servicio(client: client).iniciarPrueba(
-      sesionId: 4,
-      configuracionId: 10,
-      varianteProductoId: 11,
-    );
+    final VestidorPrueba prueba = await _servicio(
+      client: client,
+    ).iniciarPrueba(sesionId: 4, configuracionId: 10, varianteProductoId: 11);
 
     expect(capturada.method, 'POST');
     expect(
       capturada.url.toString(),
-      '$_base/vestidor-virtual/sesiones/4/pruebas',
+      '$_base/tenant/vestidor-virtual/sesiones/4/pruebas',
     );
     expect(jsonDecode(capturada.body), <String, dynamic>{
       'configuracion_id': 10,
@@ -179,10 +179,8 @@ void main() {
       return http.Response(jsonEncode(_pruebaJson), 201);
     });
 
-    await _servicio(client: client).iniciarPrueba(
-      sesionId: 4,
-      configuracionId: 10,
-    );
+    await _servicio(client: client)
+        .iniciarPrueba(sesionId: 4, configuracionId: 10);
 
     expect(jsonDecode(capturada.body), <String, dynamic>{
       'configuracion_id': 10,
@@ -196,15 +194,13 @@ void main() {
       return http.Response(jsonEncode(_pruebaJson), 200);
     });
 
-    await _servicio(client: client).finalizarPrueba(
-      pruebaId: 8,
-      estado: VestidorPruebaEstado.completada,
-    );
+    await _servicio(client: client)
+        .finalizarPrueba(pruebaId: 8, estado: VestidorPruebaEstado.completada);
 
     expect(capturada.method, 'PATCH');
     expect(
       capturada.url.toString(),
-      '$_base/vestidor-virtual/pruebas/8/finalizar',
+      '$_base/tenant/vestidor-virtual/pruebas/8/finalizar',
     );
     expect(jsonDecode(capturada.body), <String, dynamic>{
       'estado': 'COMPLETADA',
@@ -218,15 +214,13 @@ void main() {
       return http.Response(jsonEncode(_sesionJson), 200);
     });
 
-    await _servicio(client: client).finalizarSesion(
-      sesionId: 4,
-      estado: VestidorSesionEstado.finalizada,
-    );
+    await _servicio(client: client)
+        .finalizarSesion(sesionId: 4, estado: VestidorSesionEstado.finalizada);
 
     expect(capturada.method, 'PATCH');
     expect(
       capturada.url.toString(),
-      '$_base/vestidor-virtual/sesiones/4/finalizar',
+      '$_base/tenant/vestidor-virtual/sesiones/4/finalizar',
     );
     expect(jsonDecode(capturada.body), <String, dynamic>{
       'estado': 'FINALIZADA',
@@ -242,8 +236,11 @@ void main() {
       _servicio(client: client, token: null).crearSesion(),
       throwsA(
         isA<VestidorApiException>()
-            .having((VestidorApiException e) => e.unauthorized,
-                'unauthorized', isTrue)
+            .having(
+              (VestidorApiException e) => e.unauthorized,
+              'unauthorized',
+              isTrue,
+            )
             .having((VestidorApiException e) => e.statusCode, 'status', 401),
       ),
     );
@@ -271,8 +268,11 @@ void main() {
       _servicio(client: _responde(401, '{}')).crearSesion(),
       throwsA(
         isA<VestidorApiException>()
-            .having((VestidorApiException e) => e.unauthorized,
-                'unauthorized', isTrue)
+            .having(
+              (VestidorApiException e) => e.unauthorized,
+              'unauthorized',
+              isTrue,
+            )
             .having((VestidorApiException e) => e.statusCode, 'status', 401),
       ),
     );
@@ -282,17 +282,19 @@ void main() {
     await expectLater(
       _servicio(client: _responde(403, '{}')).crearSesion(),
       throwsA(
-        isA<VestidorApiException>()
-            .having((VestidorApiException e) => e.statusCode, 'status', 403),
+        isA<VestidorApiException>().having(
+          (VestidorApiException e) => e.statusCode,
+          'status',
+          403,
+        ),
       ),
     );
   });
 
   test('404 se marca como notFound', () async {
     await expectLater(
-      _servicio(client: _responde(404, '{}')).obtenerConfiguraciones(
-        productoId: 999,
-      ),
+      _servicio(client: _responde(404, '{}'))
+          .obtenerConfiguraciones(productoId: 999),
       throwsA(
         isA<VestidorApiException>()
             .having((VestidorApiException e) => e.notFound, 'notFound', isTrue)
@@ -303,10 +305,8 @@ void main() {
 
   test('409 se marca como conflict', () async {
     await expectLater(
-      _servicio(client: _responde(409, '{}')).iniciarPrueba(
-        sesionId: 4,
-        configuracionId: 10,
-      ),
+      _servicio(client: _responde(409, '{}'))
+          .iniciarPrueba(sesionId: 4, configuracionId: 10),
       throwsA(
         isA<VestidorApiException>()
             .having((VestidorApiException e) => e.conflict, 'conflict', isTrue)
@@ -317,13 +317,14 @@ void main() {
 
   test('422 expone su código', () async {
     await expectLater(
-      _servicio(client: _responde(422, '{}')).finalizarSesion(
-        sesionId: 4,
-        estado: 'ACTIVA',
-      ),
+      _servicio(client: _responde(422, '{}'))
+          .finalizarSesion(sesionId: 4, estado: 'ACTIVA'),
       throwsA(
-        isA<VestidorApiException>()
-            .having((VestidorApiException e) => e.statusCode, 'status', 422),
+        isA<VestidorApiException>().having(
+          (VestidorApiException e) => e.statusCode,
+          'status',
+          422,
+        ),
       ),
     );
   });
@@ -332,8 +333,11 @@ void main() {
     await expectLater(
       _servicio(client: _responde(500, '{}')).crearSesion(),
       throwsA(
-        isA<VestidorApiException>()
-            .having((VestidorApiException e) => e.statusCode, 'status', 500),
+        isA<VestidorApiException>().having(
+          (VestidorApiException e) => e.statusCode,
+          'status',
+          500,
+        ),
       ),
     );
   });

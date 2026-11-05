@@ -35,7 +35,9 @@ class Producto {
     precio: _toDouble(json['precio']),
     estado: _toBool(json['estado'], fallback: true),
     categoriaId: _toInt(json['categoria_id']),
-    categoriaNombre: _categoriaNombre(json['categoria']),
+    categoriaNombre: _toString(json['categoria_nombre']).trim().isNotEmpty
+        ? _toString(json['categoria_nombre'])
+        : _categoriaNombre(json['categoria']),
     imagenPrincipalUrl: _toNullableString(json['imagen_principal_url']),
   );
 
@@ -249,7 +251,9 @@ class ProductoDetalle extends Producto {
       precio: _toDouble(json['precio']),
       estado: _toBool(json['estado'], fallback: true),
       categoriaId: _toInt(json['categoria_id']),
-      categoriaNombre: _categoriaNombre(json['categoria']),
+      categoriaNombre: _toString(json['categoria_nombre']).trim().isNotEmpty
+          ? _toString(json['categoria_nombre'])
+          : _categoriaNombre(json['categoria']),
       imagenPrincipalUrl: _toNullableString(json['imagen_principal_url']),
       recursos: recursos,
       variantes: variantes,

@@ -46,3 +46,19 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Coordination and evidence artifacts
+CTX_*.md
+PROMPT_*.md
+CONTEXTO_*.md
+REP_*.md
+Master_Prompt*.md
+odd/tasks/
+
+# Local databases, dumps, backups, and temporary data
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+*.backup

@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/config/api_config.dart';
+import '../../../core/offline/local_database.dart';
+import '../../../core/offline/offline_operation.dart';
+import '../../../core/offline/offline_queue.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/utils/date_formatters.dart';
 import '../models/reserva_model.dart';
@@ -19,12 +22,14 @@ class ReservaException implements Exception {
     this.statusCode,
     this.unauthorized = false,
     this.conflicto = false,
+    this.queuedOffline = false,
   });
 
   final String message;
   final int? statusCode;
   final bool unauthorized;
   final bool conflicto;
+  final bool queuedOffline;
 
   @override
   String toString() => 'ReservaException($statusCode): $message';
@@ -43,9 +48,16 @@ class ReservaException implements Exception {
 /// envía `cliente_id`.
 class ReservaService {
   /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
-  ReservaService({AuthStorage? storage, http.Client? client})
+  ReservaService({
+    AuthStorage? storage,
+    http.Client? client,
+    OfflineQueue? queue,
+    LocalDatabase? database,
+  })
     : _storage = storage ?? AuthStorage(),
-      _client = client ?? http.Client();
+      _client = client ?? http.Client(),
+      _queue = queue ?? OfflineQueue(storage: storage, database: database),
+      _database = database ?? LocalDatabase.instance;
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -69,6 +81,8 @@ class ReservaService {
 
   final AuthStorage _storage;
   final http.Client _client;
+  final OfflineQueue _queue;
+  final LocalDatabase _database;
 
   /// Crea una reserva a partir de un carrito ACTIVO (`POST /reservas`).
   ///
@@ -79,16 +93,53 @@ class ReservaService {
     required DateTime fechaAtencion,
     String? observacion,
   }) async {
-    final Object? data = await _enviar(
-      'POST',
-      ApiConfig.reservasUrl,
-      mensajeConflicto: _conflictStockMessage,
-      body: <String, dynamic>{
-        'carrito_id': carritoId,
-        'fecha_atencion': formatearIsoLocal(fechaAtencion),
-        'observacion': _observacionOLimpiar(observacion),
-      },
-    );
+    final Map<String, dynamic> payload = <String, dynamic>{
+      'carrito_id': carritoId,
+      'fecha_atencion': formatearIsoLocal(fechaAtencion),
+      'observacion': _observacionOLimpiar(observacion),
+    };
+    OfflineOperation? operation;
+    try {
+      operation = await _queue.add('reserva', payload);
+      await _database.updateOperation(
+        operation.operationId,
+        OfflineOperationStatus.enviado,
+        incrementAttempt: true,
+      );
+    } catch (_) {}
+    final Object? data;
+    try {
+      data = await _enviar(
+        'POST',
+        ApiConfig.reservasCrearUrl,
+        mensajeConflicto: _conflictStockMessage,
+        body: payload,
+        operationId: operation?.operationId,
+      );
+      if (operation != null) {
+        await _database.updateOperation(
+          operation.operationId,
+          OfflineOperationStatus.confirmado,
+        );
+      }
+    } on ReservaException catch (error) {
+      if (operation != null) {
+        await _database.updateOperation(
+          operation.operationId,
+          error.conflicto
+              ? OfflineOperationStatus.conflicto
+              : OfflineOperationStatus.pendiente,
+          error: error.message,
+        );
+      }
+      if (operation != null && error.statusCode == null) {
+        throw const ReservaException(
+          'Reserva guardada sin conexión. Requiere confirmación al reconectar.',
+          queuedOffline: true,
+        );
+      }
+      rethrow;
+    }
     return _detalleDesde(data);
   }
 
@@ -102,9 +153,12 @@ class ReservaService {
       ApiConfig.reservasUrl,
       query: filtro.isEmpty ? null : <String, String>{'estado': filtro},
     );
-    if (data is! Map) throw const ReservaException(_unexpectedErrorMessage);
+    final Object normalized = data is List
+        ? <String, dynamic>{'items': data, 'total_reservas': data.length}
+        : data ?? const <String, dynamic>{};
+    if (normalized is! Map) throw const ReservaException(_unexpectedErrorMessage);
     try {
-      return ReservaListaResponse.fromJson(data.cast<String, dynamic>());
+      return ReservaListaResponse.fromJson(normalized.cast<String, dynamic>());
     } catch (_) {
       throw const ReservaException(_unexpectedErrorMessage);
     }
@@ -112,11 +166,24 @@ class ReservaService {
 
   /// Obtiene el detalle de una reserva (`GET /reservas/{reserva_id}`).
   Future<ReservaDetalle> obtenerReserva(int reservaId) async {
-    final Object? data = await _enviar(
-      'GET',
-      ApiConfig.reservaDetalleUrl(reservaId),
+    final ReservaListaResponse lista = await listarReservas();
+    final ReservaResumen resumen = lista.items.firstWhere(
+      (ReservaResumen item) => item.reservaId == reservaId,
+      orElse: () => throw const ReservaException(_notFoundMessage, statusCode: 404),
     );
-    return _detalleDesde(data);
+    return ReservaDetalle.fromJson(<String, dynamic>{
+      'reserva_id': resumen.reservaId,
+      'carrito_id': resumen.carritoId,
+      'cliente_id': resumen.clienteId,
+      'sucursal_id': resumen.sucursalId,
+      'sucursal_nombre': resumen.sucursalNombre,
+      'fecha_reserva': resumen.fechaReserva?.toIso8601String(),
+      'fecha_atencion': resumen.fechaAtencion?.toIso8601String(),
+      'estado': resumen.estado,
+      'observacion': resumen.observacion,
+      'items': const <Object>[],
+      'cantidad_total_unidades': resumen.cantidadUnidades,
+    });
   }
 
   /// Cancela una reserva PENDIENTE o CONFIRMADA
@@ -160,9 +227,11 @@ class ReservaService {
     Map<String, dynamic>? body,
     Map<String, String>? query,
     String? mensajeConflicto,
+    String? operationId,
   }) async {
     _asegurarConfiguracion();
     final Map<String, String> headers = await _headers(conCuerpo: body != null);
+    if (operationId != null) headers['Idempotency-Key'] = operationId;
     final Uri uri = Uri.parse(url).replace(queryParameters: query);
 
     final http.Response response;

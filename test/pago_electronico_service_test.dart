@@ -66,11 +66,11 @@ void main() {
   test('ApiConfig centraliza las rutas de CU22', () {
     expect(
       ApiConfig.stripeIntencionUrlDesde('http://api.test'),
-      'http://api.test/pagos/stripe/intencion',
+      'http://api.test/tenant/pagos/stripe/intencion',
     );
     expect(
       ApiConfig.stripeEstadoVentaUrlDesde('http://api.test', 123),
-      'http://api.test/pagos/stripe/ventas/123/estado',
+      'http://api.test/tenant/pagos/stripe/ventas/123/estado',
     );
   });
 
@@ -89,7 +89,7 @@ void main() {
         .crearIntencion(123);
 
     expect(capturada.method, 'POST');
-    expect(capturada.url.toString(), '$_base/pagos/stripe/intencion');
+    expect(capturada.url.toString(), '$_base/tenant/pagos/stripe/intencion');
     expect(capturada.headers['Authorization'], 'Bearer jwt-test');
     expect(capturada.headers['Content-Type'], contains('application/json'));
     expect(jsonDecode(capturada.body), <String, dynamic>{'venta_id': 123});
@@ -113,7 +113,10 @@ void main() {
         .consultarEstado(123);
 
     expect(capturada.method, 'GET');
-    expect(capturada.url.toString(), '$_base/pagos/stripe/ventas/123/estado');
+    expect(
+      capturada.url.toString(),
+      '$_base/tenant/pagos/stripe/ventas/123/estado',
+    );
     expect(capturada.headers['Authorization'], 'Bearer jwt-test');
     expect(estado.pagoAprobado, isTrue);
     expect(estado.compraCompletada, isTrue);

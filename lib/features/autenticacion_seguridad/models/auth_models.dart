@@ -8,14 +8,21 @@
 
 /// Cuerpo del request para `POST /auth/clientes/login`.
 class LoginRequest {
-  const LoginRequest({required this.correo, required this.password});
+  const LoginRequest({
+    required this.correo,
+    required this.password,
+    required this.empresaSlug,
+  });
 
   final String correo;
   final String password;
+  final String empresaSlug;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'correo': correo,
     'password': password,
+    'empresa_slug': empresaSlug,
+    'contexto': 'cliente',
   };
 }
 
@@ -26,25 +33,37 @@ class UsuarioAuth {
     required this.correo,
     required this.rol,
     required this.contexto,
+    this.empresaId = 0,
+    this.empresaSlug = '',
+    this.empresaNombre = '',
   });
 
   factory UsuarioAuth.fromJson(Map<String, dynamic> json) => UsuarioAuth(
-    id: _toInt(json['id']),
+    id: _toInt(json['usuario_id'] ?? json['id']),
     correo: _toString(json['correo']),
     rol: _toString(json['rol']),
     contexto: _toString(json['contexto']),
+    empresaId: _toInt(json['empresa_id']),
+    empresaSlug: _toString(json['empresa_slug']),
+    empresaNombre: _toString(json['empresa_nombre']),
   );
 
   final int id;
   final String correo;
   final String rol;
   final String contexto;
+  final int empresaId;
+  final String empresaSlug;
+  final String empresaNombre;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'id': id,
     'correo': correo,
     'rol': rol,
     'contexto': contexto,
+    'empresa_id': empresaId,
+    'empresa_slug': empresaSlug,
+    'empresa_nombre': empresaNombre,
   };
 }
 
@@ -98,23 +117,42 @@ class ClienteLoginResponse {
     required this.accessToken,
     required this.tokenType,
     required this.usuario,
+    required this.empresaId,
+    required this.empresaSlug,
+    required this.empresaNombre,
   });
 
   factory ClienteLoginResponse.fromJson(Map<String, dynamic> json) =>
       ClienteLoginResponse(
         accessToken: _toString(json['access_token']),
         tokenType: _toString(json['token_type']),
-        usuario: ClienteAuth.fromJson(_toJsonMap(json['usuario'])),
+        usuario: ClienteAuth.fromJson(
+          json['usuario'] is Map
+              ? _toJsonMap(json['usuario'])
+              : <String, dynamic>{
+                  'rol': json['rol'],
+                  'contexto': json['contexto'],
+                },
+        ),
+        empresaId: _toInt(json['empresa_id']),
+        empresaSlug: _toString(json['empresa_slug']),
+        empresaNombre: _toString(json['empresa_nombre']),
       );
 
   final String accessToken;
   final String tokenType;
   final ClienteAuth usuario;
+  final int empresaId;
+  final String empresaSlug;
+  final String empresaNombre;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'access_token': accessToken,
     'token_type': tokenType,
     'usuario': usuario.toJson(),
+    'empresa_id': empresaId,
+    'empresa_slug': empresaSlug,
+    'empresa_nombre': empresaNombre,
   };
 }
 

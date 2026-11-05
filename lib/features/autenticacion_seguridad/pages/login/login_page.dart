@@ -21,6 +21,7 @@ class _LoginPageState extends State<LoginPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _correoController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _empresaController = TextEditingController();
   final AuthService _authService = AuthService();
 
   bool _obscurePassword = true;
@@ -31,6 +32,7 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _correoController.dispose();
     _passwordController.dispose();
+    _empresaController.dispose();
     super.dispose();
   }
 
@@ -46,6 +48,7 @@ class _LoginPageState extends State<LoginPage> {
       await _authService.loginCliente(
         correo: _correoController.text.trim(),
         password: _passwordController.text,
+        empresaSlug: _empresaController.text.trim(),
       );
       if (!mounted) return;
       // Reemplaza el login: no se puede volver con el botón atrás.
@@ -109,6 +112,15 @@ class _LoginPageState extends State<LoginPage> {
 
   String? _validarPassword(String? value) {
     if (value == null || value.isEmpty) return 'Ingresa tu contraseña.';
+    return null;
+  }
+
+  String? _validarEmpresa(String? value) {
+    final String slug = value?.trim().toLowerCase() ?? '';
+    if (slug.isEmpty) return 'Ingresa el identificador de tu empresa.';
+    if (!RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$').hasMatch(slug)) {
+      return 'Usa letras minúsculas, números y guiones.';
+    }
     return null;
   }
 
@@ -210,6 +222,16 @@ class _LoginPageState extends State<LoginPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _CampoTexto(
+          controller: _empresaController,
+          label: 'Empresa',
+          hint: 'mi-empresa',
+          icon: Icons.business_outlined,
+          textInputAction: TextInputAction.next,
+          enabled: !_isLoading,
+          validator: _validarEmpresa,
+        ),
+        const SizedBox(height: 18),
         _CampoTexto(
           controller: _correoController,
           label: 'Correo electrónico',

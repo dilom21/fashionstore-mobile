@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 
 import '../../../core/config/api_config.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -47,9 +48,11 @@ class PagoElectronicoService {
     AuthStorage? storage,
     http.Client? client,
     String? baseUrl,
+    Uuid? uuid,
   }) : _storage = storage ?? AuthStorage(),
        _client = client ?? http.Client(),
-       _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim();
+       _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim(),
+       _uuid = uuid ?? const Uuid();
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -75,6 +78,7 @@ class PagoElectronicoService {
   final AuthStorage _storage;
   final http.Client _client;
   final String _baseUrl;
+  final Uuid _uuid;
 
   /// Crea/reutiliza el PaymentIntent de la venta (`POST /pagos/stripe/intencion`).
   Future<IntencionPago> crearIntencion(int ventaId) async {
@@ -82,6 +86,7 @@ class PagoElectronicoService {
       'POST',
       ApiConfig.stripeIntencionUrlDesde(_baseUrl),
       body: <String, dynamic>{'venta_id': ventaId},
+      operationId: _uuid.v4(),
     );
     if (data is! Map) {
       throw const PagoElectronicoException(_unexpectedErrorMessage);
@@ -118,9 +123,11 @@ class PagoElectronicoService {
     String metodo,
     String url, {
     Map<String, dynamic>? body,
+    String? operationId,
   }) async {
     _asegurarConfiguracion();
     final Map<String, String> headers = await _headers(conCuerpo: body != null);
+    if (operationId != null) headers['Idempotency-Key'] = operationId;
     final Uri uri = Uri.parse(url);
 
     final http.Response response;

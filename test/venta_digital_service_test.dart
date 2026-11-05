@@ -77,10 +77,10 @@ http.Client _responde(int status, Object body) => MockClient(
 );
 
 void main() {
-  test('ApiConfig centraliza la ruta /ventas/digital', () {
+  test('ApiConfig centraliza la ruta /tenant/ventas/digital', () {
     expect(
       ApiConfig.ventasDigitalUrlDesde('http://api.test'),
-      'http://api.test/ventas/digital',
+      'http://api.test/tenant/ventas/digital',
     );
   });
 
@@ -99,7 +99,7 @@ void main() {
         .realizarCompra(45);
 
     expect(capturada.method, 'POST');
-    expect(capturada.url.toString(), '$_base/ventas/digital');
+    expect(capturada.url.toString(), '$_base/tenant/ventas/digital');
     expect(capturada.headers['Authorization'], 'Bearer jwt-test');
     expect(capturada.headers['Content-Type'], contains('application/json'));
     expect(jsonDecode(capturada.body), <String, dynamic>{

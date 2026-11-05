@@ -85,7 +85,7 @@ class CarritoService {
         'cantidad': cantidad,
       },
     );
-    return _detalleDesde(data);
+    return _detalleORefrescar(data);
   }
 
   /// Lista los carritos activos del cliente (`GET /carritos`).
@@ -107,7 +107,7 @@ class CarritoService {
       'GET',
       ApiConfig.carritoDetalleUrl(carritoId),
     );
-    return _detalleDesde(data);
+    return _detalleORefrescar(data);
   }
 
   /// Actualiza la cantidad de una línea
@@ -125,7 +125,7 @@ class CarritoService {
       ApiConfig.carritoItemUrl(carritoId, detalleId),
       body: <String, dynamic>{'cantidad': cantidad},
     );
-    return _detalleDesde(data);
+    return _detalleORefrescar(data, fallbackCarritoId: carritoId);
   }
 
   /// Elimina una línea (`DELETE /carritos/{carrito_id}/items/{detalle_id}`).
@@ -137,7 +137,7 @@ class CarritoService {
       'DELETE',
       ApiConfig.carritoItemUrl(carritoId, detalleId),
     );
-    return _detalleDesde(data);
+    return _detalleORefrescar(data, fallbackCarritoId: carritoId);
   }
 
   /// Elimina un carrito completo (`DELETE /carritos/{carrito_id}`).
@@ -151,7 +151,7 @@ class CarritoService {
       ApiConfig.carritoDetalleUrl(carritoId),
     );
     if (data == null) return CarritoDetalle.vacio(carritoId);
-    return _detalleDesde(data);
+    return _detalleORefrescar(data, fallbackCarritoId: carritoId);
   }
 
   // -------------------------------------------------------------------------
@@ -295,9 +295,34 @@ class CarritoService {
     }
   }
 
+  Future<CarritoDetalle> _detalleORefrescar(
+    Object? data, {
+    int? fallbackCarritoId,
+  }) async {
+    if (data is! Map) throw const CarritoException(_unexpectedErrorMessage);
+    final Map<String, dynamic> json = data.cast<String, dynamic>();
+    if (json.containsKey('items') && json.containsKey('sucursal_id')) {
+      return _detalleDesde(json);
+    }
+    final int carritoId = _toIntLocal(json['carrito_id']) ?? fallbackCarritoId ?? 0;
+    if (carritoId <= 0) throw const CarritoException(_unexpectedErrorMessage);
+    try {
+      return await obtenerCarrito(carritoId);
+    } on CarritoException catch (error) {
+      if (error.statusCode == 404) return CarritoDetalle.vacio(carritoId);
+      rethrow;
+    }
+  }
+
   void _asegurarConfiguracion() {
     if (!ApiConfig.isConfigured) {
       throw const CarritoException(ApiConfig.missingBaseUrlHint);
     }
   }
+}
+
+int? _toIntLocal(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value');
 }

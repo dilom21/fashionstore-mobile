@@ -69,11 +69,10 @@ http.Client _responde(int status, Object body) => MockClient(
 );
 
 void main() {
-  test('ApiConfig centraliza la ruta /asistencia-inteligente/recomendaciones',
-      () {
+  test('ApiConfig centraliza la ruta /tenant/asistencia-inteligente/recomendaciones', () {
     expect(
       ApiConfig.asistenciaRecomendacionesUrlDesde('http://api.test'),
-      'http://api.test/asistencia-inteligente/recomendaciones',
+      'http://api.test/tenant/asistencia-inteligente/recomendaciones',
     );
   });
 
@@ -94,7 +93,7 @@ void main() {
     expect(capturada.method, 'POST');
     expect(
       capturada.url.toString(),
-      '$_base/asistencia-inteligente/recomendaciones',
+      '$_base/tenant/asistencia-inteligente/recomendaciones',
     );
     expect(capturada.headers['Authorization'], 'Bearer jwt-test');
     expect(capturada.headers['Content-Type'], contains('application/json'));
@@ -209,15 +208,21 @@ void main() {
     await expectLater(
       _servicio(client: _responde(403, '{}')).recomendar(consulta: 'look'),
       throwsA(
-        isA<AsistenciaException>()
-            .having((AsistenciaException e) => e.statusCode, 'status', 403),
+        isA<AsistenciaException>().having(
+          (AsistenciaException e) => e.statusCode,
+          'status',
+          403,
+        ),
       ),
     );
     await expectLater(
       _servicio(client: _responde(422, '{}')).recomendar(consulta: 'look'),
       throwsA(
-        isA<AsistenciaException>()
-            .having((AsistenciaException e) => e.statusCode, 'status', 422),
+        isA<AsistenciaException>().having(
+          (AsistenciaException e) => e.statusCode,
+          'status',
+          422,
+        ),
       ),
     );
   });
@@ -264,8 +269,11 @@ void main() {
     await expectLater(
       _servicio(client: _responde(500, '{}')).recomendar(consulta: 'look'),
       throwsA(
-        isA<AsistenciaException>()
-            .having((AsistenciaException e) => e.statusCode, 'status', 500),
+        isA<AsistenciaException>().having(
+          (AsistenciaException e) => e.statusCode,
+          'status',
+          500,
+        ),
       ),
     );
   });

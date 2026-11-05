@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/config/api_config.dart';
+import '../../../core/offline/local_database.dart';
 import '../../../core/storage/auth_storage.dart';
+import '../../../core/storage/tenant_session.dart';
 import '../models/auth_models.dart';
 
 /// Error de autenticación con un mensaje apto para mostrar al usuario.
@@ -32,9 +34,13 @@ class AuthException implements Exception {
 /// Nunca usa `POST /auth/personal/login` (personal interno del sistema web).
 class AuthService {
   /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
-  AuthService({AuthStorage? storage, http.Client? client})
-    : _storage = storage ?? AuthStorage(),
-      _client = client ?? http.Client();
+  AuthService({
+    AuthStorage? storage,
+    http.Client? client,
+    LocalDatabase? database,
+  }) : _storage = storage ?? AuthStorage(),
+       _client = client ?? http.Client(),
+       _database = database ?? LocalDatabase.instance;
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -59,17 +65,20 @@ class AuthService {
 
   final AuthStorage _storage;
   final http.Client _client;
+  final LocalDatabase _database;
 
   /// Autentica a un CLIENTE y guarda su token JWT si el contexto es `cliente`.
   Future<ClienteLoginResponse> loginCliente({
     required String correo,
     required String password,
+    required String empresaSlug,
   }) async {
     _asegurarConfiguracion();
 
     final LoginRequest request = LoginRequest(
       correo: correo,
       password: password,
+      empresaSlug: empresaSlug.trim().toLowerCase(),
     );
 
     final http.Response response;
@@ -100,11 +109,31 @@ class AuthService {
 
       // La app móvil es solo para CLIENTES.
       if (resultado.usuario.contexto != 'cliente') {
-        await _storage.deleteToken();
+        await _storage.clearSession();
         throw const AuthException(_invalidSessionMessage);
       }
 
       await _storage.saveToken(resultado.accessToken);
+      try {
+        final UsuarioAuth me = await obtenerUsuarioActual();
+        if (me.contexto != 'cliente' || me.empresaId != resultado.empresaId) {
+          await _storage.clearSession();
+          throw const AuthException(_invalidSessionMessage);
+        }
+        await _storage.saveSession(
+          TenantSession(
+            empresaId: me.empresaId,
+            usuarioId: me.id,
+            empresaSlug: me.empresaSlug,
+            empresaNombre: me.empresaNombre,
+          ),
+        );
+      } on AuthException {
+        rethrow;
+      } catch (_) {
+        await _storage.clearSession();
+        throw const AuthException(_unexpectedErrorMessage);
+      }
       return resultado;
     }
 
@@ -130,7 +159,7 @@ class AuthService {
     try {
       response = await _client
           .post(
-            Uri.parse(ApiConfig.clientesRegistroUrl),
+            Uri.parse(ApiConfig.clientesRegistroLegacyUrl),
             headers: const <String, String>{
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -274,19 +303,36 @@ class AuthService {
       return false;
     }
     if (token == null || token.isEmpty) return false;
+    final TenantSession? localSession;
+    try {
+      localSession = await _storage.readSession();
+    } catch (_) {
+      return false;
+    }
+    if (localSession == null) return false;
 
     try {
       final UsuarioAuth usuario = await obtenerUsuarioActual();
       if (usuario.contexto != 'cliente') {
-        await _storage.deleteToken();
+        await _storage.clearSession();
+        return false;
+      }
+      final TenantSession? session = await _storage.readSession();
+      if (session == null ||
+          session.usuarioId != usuario.id ||
+          session.empresaId != usuario.empresaId) {
+        await _storage.clearSession();
         return false;
       }
       return true;
     } on AuthException catch (error) {
       if (error.unauthorized) {
-        await _storage.deleteToken();
+        await _storage.clearSession();
+        return false;
       }
-      return false;
+      // Sin conectividad se conserva la sesión tenant local para permitir
+      // catálogo cacheado y captura de operaciones offline.
+      return true;
     } catch (_) {
       return false;
     }
@@ -295,8 +341,24 @@ class AuthService {
   /// Elimina el token JWT local (cierre de sesión).
   ///
   /// No existe endpoint de logout en el backend: el JWT se descarta en el
-  /// dispositivo.
-  Future<void> cerrarSesion() => _storage.deleteToken();
+  /// dispositivo. Además se limpia la caché y la cola offline del scope
+  /// `empresa:usuario` para que no sobrevivan al cierre de sesión; esa
+  /// limpieza es best-effort y nunca bloquea el logout.
+  Future<void> cerrarSesion() async {
+    TenantSession? session;
+    try {
+      session = await _storage.readSession();
+    } catch (_) {
+      session = null;
+    }
+    await _storage.clearSession();
+    if (session == null) return;
+    try {
+      await _database.clearScope(session.scopeKey);
+    } catch (_) {
+      // La sesión ya quedó cerrada; el almacenamiento local es prescindible.
+    }
+  }
 
   void _asegurarConfiguracion() {
     if (!ApiConfig.isConfigured) {

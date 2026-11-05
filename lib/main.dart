@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_colors.dart';
+import 'core/offline/sync_service.dart';
 import 'features/autenticacion_seguridad/pages/login/login_page.dart';
 import 'features/autenticacion_seguridad/services/auth_service.dart';
 import 'features/inicio/pages/main_navigation_page.dart';
@@ -54,7 +55,19 @@ class _SessionGateState extends State<_SessionGate> {
   @override
   void initState() {
     super.initState();
-    _restauracion = _authService.restaurarSesion();
+    _restauracion = _restaurarYSincronizar();
+  }
+
+  Future<bool> _restaurarYSincronizar() async {
+    final bool restored = await _authService.restaurarSesion();
+    if (restored) {
+      try {
+        await OfflineSyncService().synchronize();
+      } catch (_) {
+        // El arranque offline no se bloquea por una sincronización pendiente.
+      }
+    }
+    return restored;
   }
 
   @override

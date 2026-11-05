@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/config/api_config.dart';
+import '../../../core/offline/local_database.dart';
+import '../../../core/storage/auth_storage.dart';
+import '../../../core/storage/tenant_session.dart';
 import '../models/catalogo_filtros_model.dart';
 import '../models/disponibilidad_model.dart';
 import '../models/producto_model.dart';
@@ -33,7 +36,13 @@ class CatalogException implements Exception {
 ///   GET /productos/{id}/disponibilidad
 ///   GET /catalogo/filtros
 class CatalogoService {
-  CatalogoService({http.Client? client}) : _client = client ?? http.Client();
+  CatalogoService({
+    http.Client? client,
+    AuthStorage? storage,
+    LocalDatabase? database,
+  }) : _client = client ?? http.Client(),
+       _storage = storage ?? AuthStorage(),
+       _database = database ?? LocalDatabase.instance;
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -44,6 +53,8 @@ class CatalogoService {
   static const String _notFoundMessage = 'El producto solicitado no existe.';
 
   final http.Client _client;
+  final AuthStorage _storage;
+  final LocalDatabase _database;
 
   /// Lista productos activos con filtros opcionales.
   Future<List<Producto>> listarProductos({
@@ -69,9 +80,26 @@ class CatalogoService {
       conStock: conStock,
     );
 
-    final Object? data = await _get(ApiConfig.productosUrl, query);
+    final Map<String, String> tenantQuery = <String, String>{
+      if (categoriaId != null) 'categoria_id': '$categoriaId',
+      'limit': '100',
+      'offset': '0',
+    };
+    final Object? data = await _getCached(
+      ApiConfig.productosUrl,
+      tenantQuery,
+      resource: 'catalogo_productos',
+      cacheKey: jsonEncode(query),
+    );
     if (data is! List) throw const CatalogException(_unexpectedErrorMessage);
-    return _parseLista(data, Producto.fromJson);
+    List<Producto> productos = _parseLista(data, Producto.fromJson);
+    final String termino = (buscar ?? '').trim().toLowerCase();
+    if (termino.isNotEmpty) {
+      productos = productos
+          .where((Producto p) => p.nombre.toLowerCase().contains(termino))
+          .toList();
+    }
+    return productos;
   }
 
   /// Construye los parámetros de `GET /productos` a partir de los filtros.
@@ -104,9 +132,20 @@ class CatalogoService {
   Future<ProductoDetalle> obtenerProducto(int productoId) async {
     _asegurarConfiguracion();
 
-    final Object? data = await _get(
+    // Primero valida que el producto pertenezca al tenant. El detalle rico
+    // todavía solo existe en el contrato legacy y se usa como fallback online.
+    await _getCached(
       ApiConfig.productoDetalleUrl(productoId),
       const <String, String>{},
+      resource: 'catalogo_producto_tenant',
+      cacheKey: '$productoId',
+    );
+    final Object? data = await _getCached(
+      ApiConfig.productoDetalleLegacyUrl(productoId),
+      const <String, String>{},
+      resource: 'catalogo_producto_detalle',
+      cacheKey: '$productoId',
+      authenticated: false,
     );
     if (data is! Map) throw const CatalogException(_unexpectedErrorMessage);
     return ProductoDetalle.fromJson(data.cast<String, dynamic>());
@@ -116,9 +155,12 @@ class CatalogoService {
   Future<CatalogoFiltros> obtenerFiltros() async {
     _asegurarConfiguracion();
 
-    final Object? data = await _get(
+    final Object? data = await _getCached(
       ApiConfig.catalogoFiltrosUrl,
       const <String, String>{},
+      resource: 'catalogo_filtros',
+      cacheKey: 'all',
+      authenticated: false,
     );
     if (data is! Map) throw const CatalogException(_unexpectedErrorMessage);
     return CatalogoFiltros.fromJson(data.cast<String, dynamic>());
@@ -140,16 +182,29 @@ class CatalogoService {
     if (colorId != null) query['color_id'] = '$colorId';
     if (temporadaId != null) query['temporada_id'] = '$temporadaId';
 
-    final Object? data = await _get(
+    final Object? data = await _getCached(
       ApiConfig.productoDisponibilidadUrl(productoId),
       query,
+      resource: 'catalogo_disponibilidad',
+      cacheKey: '$productoId:${jsonEncode(query)}',
+      authenticated: false,
     );
     if (data is! Map) throw const CatalogException(_unexpectedErrorMessage);
     return DisponibilidadProducto.fromJson(data.cast<String, dynamic>());
   }
 
   /// Ejecuta un GET y decodifica el JSON con manejo de errores centralizado.
-  Future<Object?> _get(String url, Map<String, String> query) async {
+  Future<Object?> _getCached(
+    String url,
+    Map<String, String> query, {
+    required String resource,
+    required String cacheKey,
+    bool authenticated = true,
+  }) async {
+    final TenantSession? session = await _storage.readSession();
+    if (session == null) {
+      throw const CatalogException('Inicia sesión en una empresa para consultar el catálogo.');
+    }
     final Uri uri = Uri.parse(url)
         .replace(queryParameters: query.isEmpty ? null : query);
 
@@ -158,18 +213,32 @@ class CatalogoService {
       response = await _client
           .get(
             uri,
-            headers: const <String, String>{'Accept': 'application/json'},
+            headers: <String, String>{
+              'Accept': 'application/json',
+              if (authenticated)
+                'Authorization': 'Bearer ${await _storage.readToken() ?? ''}',
+            },
           )
           .timeout(_timeout);
     } on TimeoutException {
+      final Object? cached = await _database.getCache(
+        session.scopeKey, resource, cacheKey,
+      );
+      if (cached != null) return cached;
       throw const CatalogException(_connectionErrorMessage);
     } catch (_) {
+      final Object? cached = await _database.getCache(
+        session.scopeKey, resource, cacheKey,
+      );
+      if (cached != null) return cached;
       throw const CatalogException(_connectionErrorMessage);
     }
 
     if (response.statusCode == 200) {
       try {
-        return jsonDecode(response.body);
+        final Object? decoded = jsonDecode(response.body);
+        await _database.putCache(session.scopeKey, resource, cacheKey, decoded);
+        return decoded;
       } catch (_) {
         throw const CatalogException(_unexpectedErrorMessage);
       }
