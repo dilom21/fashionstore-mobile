@@ -103,4 +103,42 @@ void main() {
     await database.updateOperation(id, OfflineOperationStatus.conflicto);
     expect(await database.pending('1:10'), isEmpty);
   });
+
+  test('CU21/CU22 reads every status but never crosses tenant scope', () async {
+    for (final OfflineOperationStatus status in OfflineOperationStatus.values) {
+      await database.enqueue(
+        OfflineOperation(
+          operationId: 'op-${status.name}',
+          scopeKey: '1:10',
+          type: 'local_${status.name}',
+          payload: const <String, dynamic>{},
+          status: status,
+          attempts: 1,
+          createdAt: DateTime.utc(2026, 11, 1),
+        ),
+      );
+    }
+    await database.enqueue(
+      OfflineOperation(
+        operationId: 'other-tenant',
+        scopeKey: '2:10',
+        type: 'hidden',
+        payload: <String, dynamic>{},
+        status: OfflineOperationStatus.conflicto,
+        attempts: 1,
+        createdAt: DateTime.utc(2026, 11, 1),
+      ),
+    );
+
+    final rows = await database.operationsForScope('1:10');
+    expect(rows, hasLength(OfflineOperationStatus.values.length));
+    expect(rows.map((row) => row.type), isNot(contains('hidden')));
+    expect(
+      await database.operationsForScope(
+        '1:10',
+        status: OfflineOperationStatus.conflicto,
+      ),
+      hasLength(1),
+    );
+  });
 }

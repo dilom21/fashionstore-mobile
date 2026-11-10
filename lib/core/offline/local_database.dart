@@ -346,6 +346,23 @@ class LocalDatabase {
     return rows.map(OfflineOperation.fromRow).toList();
   }
 
+  /// Lectura completa de la cola para CU21/CU22. Nunca llama red ni cambia
+  /// estados; el scope siempre debe provenir de la sesión validada.
+  Future<List<OfflineOperation>> operationsForScope(
+    String scopeKey, {
+    OfflineOperationStatus? status,
+  }) async {
+    final List<Map<String, Object?>> rows = await (await database).query(
+      'offline_operations',
+      where: status == null ? 'scope_key = ?' : 'scope_key = ? AND status = ?',
+      whereArgs: status == null
+          ? <Object>[scopeKey]
+          : <Object>[scopeKey, status.name],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(OfflineOperation.fromRow).toList();
+  }
+
   Future<void> updateOperation(
     String operationId,
     OfflineOperationStatus status, {

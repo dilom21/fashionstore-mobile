@@ -10,6 +10,7 @@ import '../../carrito/pages/carritos_page.dart';
 import '../../catalogo/pages/catalogo_page.dart';
 import '../../reservas/pages/reservas_page.dart';
 import '../../ventas/pages/historial_compras_page.dart';
+import '../../offline/pages/offline_operations_page.dart';
 import 'inicio_page.dart';
 
 /// Contenedor principal del CLIENTE autenticado.
@@ -221,6 +222,12 @@ class _PerfilClientePageState extends State<_PerfilClientePage> {
   void _abrirHistorialCompras() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const HistorialComprasPage()),
+    );
+  }
+
+  void _abrirOperacionesLocales() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const OfflineOperationsPage()),
     );
   }
 
@@ -436,6 +443,13 @@ class _PerfilClientePageState extends State<_PerfilClientePage> {
               titulo: 'Mis compras',
               subtitulo: 'Consulta tu historial y tus comprobantes.',
               onTap: _abrirHistorialCompras,
+            ),
+            const SizedBox(height: 12),
+            _OpcionPerfil(
+              icon: Icons.sync_problem_rounded,
+              titulo: 'Operaciones locales',
+              subtitulo: 'Consulta pendientes y conflictos guardados en este dispositivo.',
+              onTap: _abrirOperacionesLocales,
             ),
             const SizedBox(height: 28),
             OutlinedButton.icon(
