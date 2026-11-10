@@ -90,6 +90,7 @@ class CatalogoService {
       tenantQuery,
       resource: 'catalogo_productos',
       cacheKey: jsonEncode(query),
+      authenticated: false,
     );
     if (data is! List) throw const CatalogException(_unexpectedErrorMessage);
     List<Producto> productos = _parseLista(data, Producto.fromJson);
@@ -132,18 +133,10 @@ class CatalogoService {
   Future<ProductoDetalle> obtenerProducto(int productoId) async {
     _asegurarConfiguracion();
 
-    // Primero valida que el producto pertenezca al tenant. El detalle rico
-    // todavía solo existe en el contrato legacy y se usa como fallback online.
-    await _getCached(
+    final Object? data = await _getCached(
       ApiConfig.productoDetalleUrl(productoId),
       const <String, String>{},
       resource: 'catalogo_producto_tenant',
-      cacheKey: '$productoId',
-    );
-    final Object? data = await _getCached(
-      ApiConfig.productoDetalleLegacyUrl(productoId),
-      const <String, String>{},
-      resource: 'catalogo_producto_detalle',
       cacheKey: '$productoId',
       authenticated: false,
     );
@@ -183,14 +176,37 @@ class CatalogoService {
     if (temporadaId != null) query['temporada_id'] = '$temporadaId';
 
     final Object? data = await _getCached(
-      ApiConfig.productoDisponibilidadUrl(productoId),
+      ApiConfig.productoDetalleUrl(productoId),
       query,
       resource: 'catalogo_disponibilidad',
       cacheKey: '$productoId:${jsonEncode(query)}',
       authenticated: false,
     );
     if (data is! Map) throw const CatalogException(_unexpectedErrorMessage);
-    return DisponibilidadProducto.fromJson(data.cast<String, dynamic>());
+    final Map<String, dynamic> detalle = data.cast<String, dynamic>();
+    final List<Map<String, dynamic>> filas = (detalle['disponibilidad'] is List)
+        ? (detalle['disponibilidad'] as List)
+            .whereType<Map>()
+            .map((Map x) => x.cast<String, dynamic>())
+            .toList()
+        : <Map<String, dynamic>>[];
+    final Map<int, List<Map<String, dynamic>>> porSucursal = <int, List<Map<String, dynamic>>>{};
+    for (final Map<String, dynamic> fila in filas) {
+      final int id = int.tryParse('${fila['sucursal_id']}') ?? 0;
+      porSucursal.putIfAbsent(id, () => <Map<String, dynamic>>[]).add(<String, dynamic>{
+        'variante_id': fila['variante_id'], 'sku': fila['sku'],
+        'talla': fila['talla'], 'color': fila['color'],
+        'temporada': fila['temporada'], 'stock_disponible': fila['stock_disponible'],
+      });
+    }
+    return DisponibilidadProducto.fromJson(<String, dynamic>{
+      'producto_id': detalle['id'], 'producto': detalle['nombre'],
+      'sucursales': porSucursal.entries.map((MapEntry<int, List<Map<String, dynamic>>> entry) => <String, dynamic>{
+        'sucursal_id': entry.key,
+        'sucursal': filas.firstWhere((Map<String, dynamic> f) => f['sucursal_id'] == entry.key)['sucursal'],
+        'variantes': entry.value,
+      }).toList(),
+    });
   }
 
   /// Ejecuta un GET y decodifica el JSON con manejo de errores centralizado.
@@ -202,9 +218,9 @@ class CatalogoService {
     bool authenticated = true,
   }) async {
     final TenantSession? session = await _storage.readSession();
-    if (session == null) {
-      throw const CatalogException('Inicia sesión en una empresa para consultar el catálogo.');
-    }
+    // El catálogo CU10 es público. La sesión, si existe, solo mejora el scope
+    // de caché; nunca es requisito para consultar ni se envía como JWT.
+    final String scopeKey = session?.scopeKey ?? 'public:${ApiConfig.empresaSlug}';
     final Uri uri = Uri.parse(url)
         .replace(queryParameters: query.isEmpty ? null : query);
 
@@ -222,13 +238,13 @@ class CatalogoService {
           .timeout(_timeout);
     } on TimeoutException {
       final Object? cached = await _database.getCache(
-        session.scopeKey, resource, cacheKey,
+        scopeKey, resource, cacheKey,
       );
       if (cached != null) return cached;
       throw const CatalogException(_connectionErrorMessage);
     } catch (_) {
       final Object? cached = await _database.getCache(
-        session.scopeKey, resource, cacheKey,
+        scopeKey, resource, cacheKey,
       );
       if (cached != null) return cached;
       throw const CatalogException(_connectionErrorMessage);
@@ -237,7 +253,7 @@ class CatalogoService {
     if (response.statusCode == 200) {
       try {
         final Object? decoded = jsonDecode(response.body);
-        await _database.putCache(session.scopeKey, resource, cacheKey, decoded);
+        await _database.putCache(scopeKey, resource, cacheKey, decoded);
         return decoded;
       } catch (_) {
         throw const CatalogException(_unexpectedErrorMessage);

@@ -34,7 +34,7 @@ class LocalDatabase {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 3,
         onCreate: (Database db, int version) async {
           await db.execute('''
             CREATE TABLE cache_entries (
@@ -63,13 +63,222 @@ class LocalDatabase {
           await db.execute(
             'CREATE INDEX idx_offline_scope_status ON offline_operations(scope_key, status, created_at)',
           );
+          await _createCu17Tables(db);
         },
         onUpgrade: (Database db, int oldVersion, int newVersion) async {
           if (oldVersion < 2) {
-            await db.execute("ALTER TABLE offline_operations ADD COLUMN next_retry_at TEXT");
+            await db.execute(
+              "ALTER TABLE offline_operations ADD COLUMN next_retry_at TEXT",
+            );
           }
+          if (oldVersion < 3) await _createCu17Tables(db);
         },
       ),
+    );
+  }
+
+  Future<void> _createCu17Tables(Database db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS offline_snapshot (
+      empresa_id INTEGER NOT NULL, usuario_id INTEGER NOT NULL, sucursal_id INTEGER,
+      snapshot_key TEXT NOT NULL, schema_version INTEGER NOT NULL, version_datos TEXT NOT NULL,
+      generado_en TEXT NOT NULL, download_started_at TEXT NOT NULL, download_completed_at TEXT,
+      estado TEXT NOT NULL, productos_count INTEGER NOT NULL, variantes_count INTEGER NOT NULL,
+      stock_count INTEGER NOT NULL, PRIMARY KEY (empresa_id, usuario_id, sucursal_id)
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS offline_producto (
+      empresa_id INTEGER NOT NULL, usuario_id INTEGER NOT NULL, sucursal_id INTEGER,
+      id INTEGER NOT NULL, json_value TEXT NOT NULL, PRIMARY KEY (empresa_id, usuario_id, sucursal_id, id)
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS offline_variante (
+      empresa_id INTEGER NOT NULL, usuario_id INTEGER NOT NULL, sucursal_id INTEGER,
+      id INTEGER NOT NULL, json_value TEXT NOT NULL, PRIMARY KEY (empresa_id, usuario_id, sucursal_id, id)
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS offline_stock_conocido (
+      empresa_id INTEGER NOT NULL, usuario_id INTEGER NOT NULL, sucursal_id INTEGER NOT NULL,
+      variante_id INTEGER NOT NULL, stock_disponible_conocido INTEGER NOT NULL,
+      fecha_actualizacion TEXT NOT NULL, PRIMARY KEY (empresa_id, usuario_id, sucursal_id, variante_id)
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS offline_sucursal (
+      empresa_id INTEGER NOT NULL, usuario_id INTEGER NOT NULL, sucursal_id INTEGER NOT NULL,
+      nombre TEXT NOT NULL, PRIMARY KEY (empresa_id, usuario_id, sucursal_id)
+    )''');
+  }
+
+  Future<void> saveCu17Snapshot({
+    required int empresaId,
+    required int usuarioId,
+    int? sucursalId,
+    required String versionDatos,
+    required String startedAt,
+    required String completedAt,
+    required List<Map<String, dynamic>> productos,
+    required List<Map<String, dynamic>> variantes,
+    required List<Map<String, dynamic>> stock,
+    required List<Map<String, dynamic>> sucursales,
+  }) async {
+    final Database db = await database;
+    await db.transaction((Transaction txn) async {
+      final Object? scopeSucursal = sucursalId;
+      for (final String table in [
+        'offline_producto',
+        'offline_variante',
+        'offline_stock_conocido',
+        'offline_sucursal',
+        'offline_snapshot',
+      ]) {
+        final bool allBranches =
+            sucursalId == null &&
+            table != 'offline_snapshot' &&
+            table != 'offline_producto' &&
+            table != 'offline_variante';
+        final String scopeWhere = allBranches
+            ? '1 = 1'
+            : (sucursalId == null ? 'sucursal_id IS NULL' : 'sucursal_id = ?');
+        final List<Object?> scopeArgs = allBranches
+            ? [empresaId, usuarioId]
+            : (sucursalId == null
+                  ? [empresaId, usuarioId]
+                  : [empresaId, usuarioId, scopeSucursal]);
+        await txn.delete(
+          table,
+          where: 'empresa_id = ? AND usuario_id = ? AND $scopeWhere',
+          whereArgs: scopeArgs,
+        );
+      }
+      final String key = '$empresaId:$usuarioId:${sucursalId ?? 'todas'}';
+      await txn.insert('offline_snapshot', {
+        'empresa_id': empresaId,
+        'usuario_id': usuarioId,
+        'sucursal_id': sucursalId,
+        'snapshot_key': key,
+        'schema_version': 1,
+        'version_datos': versionDatos,
+        'generado_en': completedAt,
+        'download_started_at': startedAt,
+        'download_completed_at': completedAt,
+        'estado': 'DISPONIBLE_LOCAL',
+        'productos_count': productos.length,
+        'variantes_count': variantes.length,
+        'stock_count': stock.length,
+      });
+      for (final Map<String, dynamic> row in productos) {
+        await txn.insert('offline_producto', {
+          'empresa_id': empresaId,
+          'usuario_id': usuarioId,
+          'sucursal_id': sucursalId,
+          'id': row['id'],
+          'json_value': jsonEncode(row),
+        });
+      }
+      for (final Map<String, dynamic> row in variantes) {
+        await txn.insert('offline_variante', {
+          'empresa_id': empresaId,
+          'usuario_id': usuarioId,
+          'sucursal_id': sucursalId,
+          'id': row['id'],
+          'json_value': jsonEncode(row),
+        });
+      }
+      for (final Map<String, dynamic> row in stock) {
+        await txn.insert('offline_stock_conocido', {
+          'empresa_id': empresaId,
+          'usuario_id': usuarioId,
+          'sucursal_id': row['sucursal_id'],
+          'variante_id': row['variante_id'],
+          'stock_disponible_conocido': row['stock_disponible_conocido'],
+          'fecha_actualizacion': row['fecha_actualizacion'],
+        });
+      }
+      for (final Map<String, dynamic> row in sucursales) {
+        await txn.insert('offline_sucursal', {
+          'empresa_id': empresaId,
+          'usuario_id': usuarioId,
+          'sucursal_id': row['id'],
+          'nombre': row['nombre'],
+        });
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>?> cu17Status(
+    int empresaId,
+    int usuarioId,
+    int? sucursalId,
+  ) async {
+    final rows = await (await database).query(
+      'offline_snapshot',
+      where: sucursalId == null
+          ? 'empresa_id = ? AND usuario_id = ? AND sucursal_id IS NULL'
+          : 'empresa_id = ? AND usuario_id = ? AND sucursal_id = ?',
+      whereArgs: sucursalId == null
+          ? [empresaId, usuarioId]
+          : [empresaId, usuarioId, sucursalId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first.cast<String, dynamic>();
+  }
+
+  /// Lecturas CU18 sobre las tablas de la instantánea CU17. No hace red ni
+  /// crea tablas/cache paralelo.
+  Future<List<Map<String, dynamic>>> cu18Productos(
+    int empresaId,
+    int usuarioId,
+    int? sucursalId,
+  ) async {
+    final rows = await (await database).query(
+      'offline_producto',
+      where: sucursalId == null
+          ? 'empresa_id = ? AND usuario_id = ? AND sucursal_id IS NULL'
+          : 'empresa_id = ? AND usuario_id = ? AND sucursal_id = ?',
+      whereArgs: sucursalId == null
+          ? [empresaId, usuarioId]
+          : [empresaId, usuarioId, sucursalId],
+    );
+    return rows
+        .map(
+          (row) =>
+              jsonDecode(row['json_value'] as String).cast<String, dynamic>()
+                  as Map<String, dynamic>,
+        )
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> cu18Variantes(
+    int empresaId,
+    int usuarioId,
+    int? sucursalId,
+  ) async {
+    final rows = await (await database).query(
+      'offline_variante',
+      where: sucursalId == null
+          ? 'empresa_id = ? AND usuario_id = ? AND sucursal_id IS NULL'
+          : 'empresa_id = ? AND usuario_id = ? AND sucursal_id = ?',
+      whereArgs: sucursalId == null
+          ? [empresaId, usuarioId]
+          : [empresaId, usuarioId, sucursalId],
+    );
+    return rows
+        .map(
+          (row) =>
+              jsonDecode(row['json_value'] as String).cast<String, dynamic>()
+                  as Map<String, dynamic>,
+        )
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> cu18Stock(
+    int empresaId,
+    int usuarioId,
+    int? sucursalId,
+  ) async {
+    return (await database).query(
+      'offline_stock_conocido',
+      where: sucursalId == null
+          ? 'empresa_id = ? AND usuario_id = ?'
+          : 'empresa_id = ? AND usuario_id = ? AND sucursal_id = ?',
+      whereArgs: sucursalId == null
+          ? [empresaId, usuarioId]
+          : [empresaId, usuarioId, sucursalId],
     );
   }
 

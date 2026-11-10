@@ -6,6 +6,7 @@ import '../../vestidor_virtual/services/vestidor_flow_service.dart';
 import '../models/catalogo_filtros_model.dart';
 import '../models/producto_model.dart';
 import '../services/catalogo_service.dart';
+import '../services/offline_catalogo_reader.dart';
 import '../widgets/disponibilidad_section.dart';
 import '../widgets/producto_media.dart';
 
@@ -20,6 +21,8 @@ class ProductoDetallePage extends StatefulWidget {
     this.filtros,
     this.service,
     this.vestidorFlow,
+    this.offline = false,
+    this.offlineReader,
   });
 
   final int productoId;
@@ -32,6 +35,8 @@ class ProductoDetallePage extends StatefulWidget {
 
   /// Servicio inyectable del flujo del vestidor virtual (facilita pruebas).
   final VestidorFlowService? vestidorFlow;
+  final bool offline;
+  final OfflineCatalogoReader? offlineReader;
 
   @override
   State<ProductoDetallePage> createState() => _ProductoDetallePageState();
@@ -40,6 +45,7 @@ class ProductoDetallePage extends StatefulWidget {
 class _ProductoDetallePageState extends State<ProductoDetallePage> {
   late final CatalogoService _service;
   late final VestidorFlowService _vestidorFlow;
+  late final OfflineCatalogoReader _offlineReader;
   bool _cargando = true;
   String? _error;
   ProductoDetalle? _producto;
@@ -52,6 +58,7 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
     super.initState();
     _service = widget.service ?? CatalogoService();
     _vestidorFlow = widget.vestidorFlow ?? VestidorFlowService();
+    _offlineReader = widget.offlineReader ?? OfflineCatalogoReader();
     _cargar();
   }
 
@@ -76,9 +83,9 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
     });
 
     try {
-      final ProductoDetalle producto = await _service.obtenerProducto(
-        widget.productoId,
-      );
+      final ProductoDetalle? local = widget.offline ? await _offlineReader.detalle(widget.productoId) : null;
+      if (widget.offline && local == null) throw const CatalogException('Producto no disponible en la descarga local.');
+      final ProductoDetalle producto = local ?? await _service.obtenerProducto(widget.productoId);
       if (!mounted) return;
       setState(() {
         _producto = producto;

@@ -6,6 +6,8 @@ import '../../../core/theme/app_colors.dart';
 import '../models/catalogo_filtros_model.dart';
 import '../models/producto_model.dart';
 import '../services/catalogo_service.dart';
+import '../services/offline_snapshot_service.dart';
+import '../services/offline_catalogo_reader.dart';
 import '../widgets/catalogo_filtros_sheet.dart';
 import '../widgets/producto_card.dart';
 import 'producto_detalle_page.dart';
@@ -28,6 +30,8 @@ class _CatalogoPageState extends State<CatalogoPage> {
   static const Duration _debounce = Duration(milliseconds: 350);
 
   late final CatalogoService _service;
+  final OfflineSnapshotService _offline = OfflineSnapshotService();
+  final OfflineCatalogoReader _offlineReader = OfflineCatalogoReader();
   final TextEditingController _busquedaController = TextEditingController();
 
   Timer? _debounceTimer;
@@ -38,6 +42,9 @@ class _CatalogoPageState extends State<CatalogoPage> {
   bool _cargando = true;
   bool _cargandoFiltros = false;
   String? _error;
+  bool _descargandoOffline = false;
+  bool _modoOffline = false;
+  Map<String, dynamic>? _offlineStatus;
 
   @override
   void initState() {
@@ -45,6 +52,12 @@ class _CatalogoPageState extends State<CatalogoPage> {
     _service = widget.service ?? CatalogoService();
     _cargarFiltros();
     _cargarProductos();
+    _cargarEstadoOffline();
+  }
+
+  Future<void> _cargarEstadoOffline() async {
+    final status = await _offlineReader.status();
+    if (mounted) setState(() => _offlineStatus = status);
   }
 
   @override
@@ -74,7 +87,9 @@ class _CatalogoPageState extends State<CatalogoPage> {
     });
 
     try {
-      final List<Producto> productos = await _service.listarProductos(
+      final List<Producto> productos = _modoOffline
+          ? await _offlineReader.listar(buscar: _busquedaController.text, soloConStock: _seleccion.soloConStock)
+          : await _service.listarProductos(
         buscar: _busquedaController.text,
         categoriaId: _seleccion.categoriaId,
         tallaId: _seleccion.tallaId,
@@ -138,7 +153,9 @@ class _CatalogoPageState extends State<CatalogoPage> {
         builder: (_) => ProductoDetallePage(
           productoId: producto.id,
           filtros: _filtros,
-          service: _service,
+              service: _service,
+              offline: _modoOffline,
+              offlineReader: _offlineReader,
         ),
       ),
     );
@@ -167,6 +184,16 @@ class _CatalogoPageState extends State<CatalogoPage> {
             cargando: _cargandoFiltros,
             onTap: _cargandoFiltros ? null : _abrirFiltros,
           ),
+          IconButton(
+            tooltip: 'Preparar uso sin conexión',
+            onPressed: _descargandoOffline ? null : _descargarOffline,
+            icon: Icon(_descargandoOffline ? Icons.sync : Icons.download_for_offline_outlined),
+          ),
+          IconButton(
+            tooltip: _modoOffline ? 'Volver al catálogo online' : 'Consultar copia local',
+            onPressed: _offlineStatus == null ? null : () { setState(() => _modoOffline = !_modoOffline); _cargarProductos(); },
+            icon: Icon(_modoOffline ? Icons.cloud_outlined : Icons.offline_bolt_outlined),
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -174,6 +201,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
         top: false,
         child: Column(
           children: [
+            if (_modoOffline) _buildAvisoOffline(),
             _buildBuscador(),
             if (!_seleccion.estaVacio) _buildBarraFiltrosActivos(),
             Expanded(child: _buildContenido()),
@@ -181,6 +209,20 @@ class _CatalogoPageState extends State<CatalogoPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildAvisoOffline() => Container(width: double.infinity, margin: const EdgeInsets.fromLTRB(20, 4, 20, 8), padding: const EdgeInsets.all(10), color: AppColors.surfaceVariant, child: Text('Copia local · ${_offlineStatus?['download_completed_at'] ?? 'fecha no disponible'} · existencias no confirmadas', style: const TextStyle(fontSize: 12, color: AppColors.textPrimary)));
+
+  Future<void> _descargarOffline() async {
+    setState(() => _descargandoOffline = true);
+    try {
+      await _offline.download();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Catálogo guardado para consulta posterior.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo preparar el modo offline: $error')));
+    } finally {
+      if (mounted) setState(() => _descargandoOffline = false);
+    }
   }
 
   Widget _buildBuscador() {

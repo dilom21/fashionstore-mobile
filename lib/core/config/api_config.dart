@@ -15,6 +15,11 @@ class ApiConfig {
   /// - Emulador Android: `http://10.0.2.2:8000`
   /// - Teléfono por USB: `http://127.0.0.1:8000` (con `adb reverse tcp:8000 tcp:8000`)
   static const String baseUrl = String.fromEnvironment('API_BASE_URL');
+  /// Tenant público de esta compilación; reemplazar con EMPRESA_SLUG al
+  /// publicar otra tienda. No es una autorización: el backend valida el slug.
+  static const String empresaSlug = String.fromEnvironment(
+    'EMPRESA_SLUG', defaultValue: 'vanter-men',
+  );
 
   /// Indica si `API_BASE_URL` fue definida al compilar la aplicación.
   static bool get isConfigured => baseUrl.trim().isNotEmpty;
@@ -44,12 +49,12 @@ class ApiConfig {
   // ---------------------------------------------------------------------------
 
   /// Endpoint de listado de productos activos con filtros opcionales.
-  static String get productosUrl => '$baseUrl/tenant/catalogo/productos';
+  static String get productosUrl => '$baseUrl/catalogo/public/$empresaSlug/productos';
   static String get productosLegacyUrl => '$baseUrl/productos';
 
   /// Endpoint de detalle de un producto (incluye recursos y variantes).
   static String productoDetalleUrl(int productoId) =>
-      '$baseUrl/tenant/catalogo/productos/$productoId';
+      '$baseUrl/catalogo/public/$empresaSlug/productos/$productoId';
   static String productoDetalleLegacyUrl(int productoId) =>
       '$baseUrl/productos/$productoId';
 
@@ -58,7 +63,8 @@ class ApiConfig {
       '$baseUrl/productos/$productoId/disponibilidad';
 
   /// Endpoint de opciones de filtros del catálogo.
-  static String get catalogoFiltrosUrl => '$baseUrl/catalogo/filtros';
+  static String get catalogoFiltrosUrl =>
+      '$baseUrl/catalogo/public/$empresaSlug/filtros';
 
   // ---------------------------------------------------------------------------
   // CU15 - Carrito del CLIENTE (requiere JWT de contexto cliente)
