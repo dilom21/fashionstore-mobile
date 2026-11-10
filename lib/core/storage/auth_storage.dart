@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import 'dart:convert';
 
 import 'tenant_session.dart';
@@ -16,6 +17,7 @@ class AuthStorage {
   /// Clave bajo la que se guarda el token de acceso.
   static const String tokenKey = 'vanter_access_token';
   static const String sessionKey = 'vanter_tenant_session';
+  static const String _pendingCheckoutPrefix = 'fashionstore_pending_checkout';
 
   final FlutterSecureStorage _storage;
 
@@ -29,10 +31,8 @@ class AuthStorage {
   /// Elimina el token JWT guardado (cierre de sesión).
   Future<void> deleteToken() => _storage.delete(key: tokenKey);
 
-  Future<void> saveSession(TenantSession session) => _storage.write(
-    key: sessionKey,
-    value: jsonEncode(session.toJson()),
-  );
+  Future<void> saveSession(TenantSession session) =>
+      _storage.write(key: sessionKey, value: jsonEncode(session.toJson()));
 
   Future<TenantSession?> readSession() async {
     final String? raw = await _storage.read(key: sessionKey);
@@ -50,4 +50,31 @@ class AuthStorage {
     await _storage.delete(key: tokenKey);
     await _storage.delete(key: sessionKey);
   }
+
+  /// Guarda la referencia de un checkout pendiente para el scope actual.
+  ///
+  /// No incluye `client_secret`, claves ni datos de tarjeta.
+  Future<void> savePendingCheckout(String scopeKey, PendingCheckout checkout) =>
+      _storage.write(
+        key: '$_pendingCheckoutPrefix:$scopeKey',
+        value: jsonEncode(checkout.toJson()),
+      );
+
+  Future<PendingCheckout?> readPendingCheckout(String scopeKey) async {
+    final String? raw = await _storage.read(
+      key: '$_pendingCheckoutPrefix:$scopeKey',
+    );
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final PendingCheckout checkout = PendingCheckout.fromJson(
+        (jsonDecode(raw) as Map).cast<String, dynamic>(),
+      );
+      return checkout.esValido ? checkout : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearPendingCheckout(String scopeKey) =>
+      _storage.delete(key: '$_pendingCheckoutPrefix:$scopeKey');
 }

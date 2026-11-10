@@ -125,7 +125,9 @@ class CarritoItem {
     productoId: _toInt(json['producto_id']),
     productoNombre: _toString(json['producto_nombre']),
     precioUnitario: _toDouble(json['precio_unitario']),
-    imagenPrincipal: _toNullableString(json['imagen_principal']),
+    imagenPrincipal: _toNullableString(
+      json['imagen_principal'] ?? json['imagen_principal_url'],
+    ),
     varianteProductoId: _toNullableInt(json['variante_producto_id']),
     sku: _toString(json['sku']),
     tallaId: _toNullableInt(json['talla_id']),

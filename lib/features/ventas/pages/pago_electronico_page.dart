@@ -8,6 +8,7 @@ import '../payments/flutter_stripe_payment_gateway.dart';
 import '../payments/stripe_config.dart';
 import '../payments/stripe_payment_gateway.dart';
 import '../services/pago_electronico_service.dart';
+import '../services/venta_digital_service.dart';
 import 'comprobante_venta_page.dart';
 
 /// CU22 – Pago electrónico de una venta digital PENDIENTE (Stripe PaymentSheet).
@@ -272,6 +273,9 @@ class _PagoElectronicoPageState extends State<PagoElectronicoPage> {
     }
 
     if (!mounted) return;
+    if (aprobado) {
+      await VentaDigitalService().limpiarCheckoutPendiente(widget.ventaId);
+    }
     setState(() {
       _confirmando = false;
       _exito = aprobado;

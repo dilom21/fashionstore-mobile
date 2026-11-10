@@ -54,7 +54,7 @@ pw.Widget _cabecera(ComprobanteVenta comprobante) {
     crossAxisAlignment: pw.CrossAxisAlignment.center,
     children: <pw.Widget>[
       pw.Text(
-        'VANTER MEN',
+        'FASHIONSTORE',
         style: pw.TextStyle(
           fontSize: 16,
           fontWeight: pw.FontWeight.bold,
@@ -81,7 +81,10 @@ pw.Widget _fila(String etiqueta, String? valor) {
     child: pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: <pw.Widget>[
-        pw.SizedBox(width: 96, child: pw.Text(etiqueta, style: _estiloEtiqueta)),
+        pw.SizedBox(
+          width: 96,
+          child: pw.Text(etiqueta, style: _estiloEtiqueta),
+        ),
         pw.Expanded(child: pw.Text(texto, style: _estiloValor)),
       ],
     ),
@@ -206,7 +209,7 @@ pw.Widget _pie() {
       ),
       pw.SizedBox(height: 2),
       pw.Text(
-        'VANTER MEN - Moda que te define',
+        'FASHIONSTORE - Moda que te define',
         style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
       ),
     ],

@@ -98,16 +98,15 @@ class _ReservaDetallePageState extends State<ReservaDetallePage> {
 
     setState(() => _cancelando = true);
     try {
-      final ReservaDetalle actualizada = await _service.cancelarReserva(
+      final ReservaEstado actualizada = await _service.cancelarReserva(
         reservaId: widget.reservaId,
         observacion: motivo,
       );
       if (!mounted) return;
-      setState(() {
-        _reserva = actualizada;
-        _cancelando = false;
-      });
+      setState(() => _cancelando = false);
       _mostrarMensaje('Reserva cancelada correctamente.');
+      // Se consulta el detalle real para reflejar el estado del backend.
+      if (actualizada.reservaId > 0) await _cargar();
     } on ReservaException catch (error) {
       if (!mounted) return;
       setState(() => _cancelando = false);

@@ -13,50 +13,71 @@ import '../models/producto_model.dart';
 
 /// Error tipado del catálogo con un mensaje apto para mostrar al usuario.
 ///
-/// El catálogo es público: un error aquí NUNCA debe cerrar la sesión.
+/// El catálogo público no cierra la sesión: un error aquí NUNCA debe expulsar
+/// al cliente autenticado.
 class CatalogException implements Exception {
   const CatalogException(this.message, {this.statusCode});
 
-  /// Mensaje legible para el cliente.
   final String message;
-
-  /// Código HTTP asociado, si aplica.
   final int? statusCode;
 
   @override
   String toString() => 'CatalogException($message)';
 }
 
-/// Servicio de catálogo público (CU09).
+/// Servicio del catálogo público SaaS (CU09).
 ///
-/// Flujo: Page -> Service -> Backend FastAPI.
-/// Endpoints consumidos (todos públicos, sin JWT):
-///   GET /productos
-///   GET /productos/{id}
-///   GET /productos/{id}/disponibilidad
-///   GET /catalogo/filtros
+/// La empresa activa sale SIEMPRE de la sesión tenant seleccionada
+/// (`TenantSession.empresaSlug`). No existe un slug fijo de compilación.
+///
+/// Endpoints consumidos (públicos, sin JWT):
+///   GET /catalogo/public/{empresa_slug}/productos
+///   GET /catalogo/public/{empresa_slug}/productos/{id}
+///   GET /catalogo/public/{empresa_slug}/filtros
 class CatalogoService {
   CatalogoService({
     http.Client? client,
     AuthStorage? storage,
     LocalDatabase? database,
+    String? baseUrl,
   }) : _client = client ?? http.Client(),
        _storage = storage ?? AuthStorage(),
-       _database = database ?? LocalDatabase.instance;
+       _database = database ?? LocalDatabase.instance,
+       _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim();
 
   static const Duration _timeout = Duration(seconds: 15);
+
+  /// Tamaño máximo aceptado por el contrato público (`limit <= 100`).
+  static const int pageSize = 100;
+
+  /// Límite defensivo de páginas (100 * 1000 = 100 000 productos).
+  static const int maxPages = 1000;
 
   static const String _connectionErrorMessage =
       'No pudimos conectarnos con el catálogo. Verifica tu conexión e inténtalo nuevamente.';
   static const String _unexpectedErrorMessage =
       'No pudimos cargar el catálogo. Inténtalo nuevamente.';
   static const String _notFoundMessage = 'El producto solicitado no existe.';
+  static const String _missingEmpresaMessage =
+      'Selecciona una empresa para consultar su catálogo.';
 
   final http.Client _client;
   final AuthStorage _storage;
   final LocalDatabase _database;
+  final String _baseUrl;
 
-  /// Lista productos activos con filtros opcionales.
+  /// Slug de la empresa de la sesión tenant activa.
+  Future<String> empresaSlug() async {
+    final TenantSession? session = await _storage.readSession();
+    final String slug = (session?.empresaSlug ?? '').trim().toLowerCase();
+    if (slug.isEmpty) throw const CatalogException(_missingEmpresaMessage);
+    return slug;
+  }
+
+  /// Lista TODOS los productos activos aplicando paginación real.
+  ///
+  /// El endpoint devuelve un arreglo plano y limita `limit` a 100, por lo que
+  /// se consultan páginas sucesivas hasta recibir una página incompleta.
   Future<List<Producto>> listarProductos({
     String? buscar,
     int? categoriaId,
@@ -68,8 +89,9 @@ class CatalogoService {
     bool? conStock,
   }) async {
     _asegurarConfiguracion();
+    final String slug = await empresaSlug();
 
-    final Map<String, String> query = construirQueryProductos(
+    final Map<String, String> query = construirQueryProductosSaaS(
       buscar: buscar,
       categoriaId: categoriaId,
       tallaId: tallaId,
@@ -80,32 +102,89 @@ class CatalogoService {
       conStock: conStock,
     );
 
-    final Map<String, String> tenantQuery = <String, String>{
-      if (categoriaId != null) 'categoria_id': '$categoriaId',
-      'limit': '100',
-      'offset': '0',
-    };
-    final Object? data = await _getCached(
-      ApiConfig.productosUrl,
-      tenantQuery,
-      resource: 'catalogo_productos',
-      cacheKey: jsonEncode(query),
-      authenticated: false,
-    );
-    if (data is! List) throw const CatalogException(_unexpectedErrorMessage);
-    List<Producto> productos = _parseLista(data, Producto.fromJson);
-    final String termino = (buscar ?? '').trim().toLowerCase();
-    if (termino.isNotEmpty) {
-      productos = productos
-          .where((Producto p) => p.nombre.toLowerCase().contains(termino))
-          .toList();
+    final TenantSession? session = await _storage.readSession();
+    final String scopeKey = session?.scopeKey ?? 'public:$slug';
+    final String resource = 'catalogo_productos_saas';
+    final String cacheKey = jsonEncode(query);
+    final String url = ApiConfig.catalogoProductosUrlDesde(_baseUrl, slug);
+
+    try {
+      final List<Object?> acumulado = <Object?>[];
+      for (int page = 0; page < maxPages; page++) {
+        final Map<String, String> pageQuery = <String, String>{
+          ...query,
+          'limit': '$pageSize',
+          'offset': '${page * pageSize}',
+        };
+        final Uri uri = Uri.parse(url).replace(queryParameters: pageQuery);
+        final http.Response response = await _client
+            .get(
+              uri,
+              headers: const <String, String>{'Accept': 'application/json'},
+            )
+            .timeout(_timeout);
+
+        if (response.statusCode != 200) {
+          throw CatalogException(
+            response.statusCode == 404
+                ? _notFoundMessage
+                : _unexpectedErrorMessage,
+            statusCode: response.statusCode,
+          );
+        }
+
+        final Object? decoded = jsonDecode(response.body);
+        if (decoded is! List) {
+          throw const CatalogException(_unexpectedErrorMessage);
+        }
+        acumulado.addAll(decoded);
+        if (decoded.length < pageSize) {
+          await _database.putCache(scopeKey, resource, cacheKey, acumulado);
+          return _parseLista(acumulado, Producto.fromJson);
+        }
+      }
+      throw const CatalogException('El catálogo excede el límite de páginas.');
+    } on CatalogException {
+      rethrow;
+    } catch (_) {
+      final Object? cached = await _database.getCache(
+        scopeKey,
+        resource,
+        cacheKey,
+      );
+      if (cached is List) return _parseLista(cached, Producto.fromJson);
+      throw const CatalogException(_connectionErrorMessage);
     }
-    return productos;
   }
 
-  /// Construye los parámetros de `GET /productos` a partir de los filtros.
+  /// Construye los parámetros del contrato público SaaS.
+  static Map<String, String> construirQueryProductosSaaS({
+    String? buscar,
+    int? categoriaId,
+    int? tallaId,
+    int? colorId,
+    int? temporadaId,
+    int? coleccionId,
+    int? sucursalId,
+    bool? conStock,
+  }) {
+    final Map<String, String> query = <String, String>{};
+    final String termino = buscar?.trim() ?? '';
+    if (termino.isNotEmpty) query['buscar'] = termino;
+    if (categoriaId != null) query['categoria_id'] = '$categoriaId';
+    if (tallaId != null) query['talla_id'] = '$tallaId';
+    if (colorId != null) query['color_id'] = '$colorId';
+    if (temporadaId != null) query['temporada_id'] = '$temporadaId';
+    if (coleccionId != null) query['coleccion_id'] = '$coleccionId';
+    if (sucursalId != null) query['sucursal_id'] = '$sucursalId';
+    query['disponibilidad'] = conStock == true ? 'CON_STOCK' : 'TODOS';
+    return query;
+  }
+
+  /// Compatibilidad con pruebas/helpers del primer parcial.
   ///
-  /// Es una función pura (sin red) para poder verificarla de forma aislada.
+  /// La app SaaS usa [construirQueryProductosSaaS]; este método se conserva
+  /// únicamente como función pura equivalente del contrato legacy.
   static Map<String, String> construirQueryProductos({
     String? buscar,
     int? categoriaId,
@@ -129,37 +208,42 @@ class CatalogoService {
     return query;
   }
 
-  /// Obtiene el detalle de un producto (recursos y variantes incluidos).
+  /// Obtiene el detalle público con variantes, recursos y disponibilidad.
   Future<ProductoDetalle> obtenerProducto(int productoId) async {
     _asegurarConfiguracion();
+    final String slug = await empresaSlug();
 
     final Object? data = await _getCached(
-      ApiConfig.productoDetalleUrl(productoId),
+      ApiConfig.catalogoProductoDetalleUrlDesde(_baseUrl, slug, productoId),
       const <String, String>{},
-      resource: 'catalogo_producto_tenant',
+      resource: 'catalogo_producto_saas',
       cacheKey: '$productoId',
-      authenticated: false,
+      slug: slug,
     );
     if (data is! Map) throw const CatalogException(_unexpectedErrorMessage);
     return ProductoDetalle.fromJson(data.cast<String, dynamic>());
   }
 
-  /// Obtiene las opciones de filtros del catálogo.
+  /// Obtiene las opciones de filtros del catálogo público de la empresa.
   Future<CatalogoFiltros> obtenerFiltros() async {
     _asegurarConfiguracion();
+    final String slug = await empresaSlug();
 
     final Object? data = await _getCached(
-      ApiConfig.catalogoFiltrosUrl,
+      ApiConfig.catalogoFiltrosUrlDesde(_baseUrl, slug),
       const <String, String>{},
-      resource: 'catalogo_filtros',
+      resource: 'catalogo_filtros_saas',
       cacheKey: 'all',
-      authenticated: false,
+      slug: slug,
     );
     if (data is! Map) throw const CatalogException(_unexpectedErrorMessage);
     return CatalogoFiltros.fromJson(data.cast<String, dynamic>());
   }
 
-  /// Obtiene la disponibilidad de un producto por sucursal.
+  /// Disponibilidad del producto agrupada por sucursal.
+  ///
+  /// En SaaS proviene del mismo detalle público (`disponibilidad[]`), nunca de
+  /// un endpoint administrativo de inventario.
   Future<DisponibilidadProducto> obtenerDisponibilidad(
     int productoId, {
     int? sucursalId,
@@ -167,60 +251,93 @@ class CatalogoService {
     int? colorId,
     int? temporadaId,
   }) async {
-    _asegurarConfiguracion();
+    final ProductoDetalle detalle = await obtenerProducto(productoId);
 
-    final Map<String, String> query = <String, String>{};
-    if (sucursalId != null) query['sucursal_id'] = '$sucursalId';
-    if (tallaId != null) query['talla_id'] = '$tallaId';
-    if (colorId != null) query['color_id'] = '$colorId';
-    if (temporadaId != null) query['temporada_id'] = '$temporadaId';
-
-    final Object? data = await _getCached(
-      ApiConfig.productoDetalleUrl(productoId),
-      query,
-      resource: 'catalogo_disponibilidad',
-      cacheKey: '$productoId:${jsonEncode(query)}',
-      authenticated: false,
-    );
-    if (data is! Map) throw const CatalogException(_unexpectedErrorMessage);
-    final Map<String, dynamic> detalle = data.cast<String, dynamic>();
-    final List<Map<String, dynamic>> filas = (detalle['disponibilidad'] is List)
-        ? (detalle['disponibilidad'] as List)
-            .whereType<Map>()
-            .map((Map x) => x.cast<String, dynamic>())
-            .toList()
-        : <Map<String, dynamic>>[];
-    final Map<int, List<Map<String, dynamic>>> porSucursal = <int, List<Map<String, dynamic>>>{};
-    for (final Map<String, dynamic> fila in filas) {
-      final int id = int.tryParse('${fila['sucursal_id']}') ?? 0;
-      porSucursal.putIfAbsent(id, () => <Map<String, dynamic>>[]).add(<String, dynamic>{
-        'variante_id': fila['variante_id'], 'sku': fila['sku'],
-        'talla': fila['talla'], 'color': fila['color'],
-        'temporada': fila['temporada'], 'stock_disponible': fila['stock_disponible'],
-      });
+    Set<int>? variantesFiltradas;
+    if (tallaId != null || colorId != null) {
+      variantesFiltradas = detalle.variantes
+          .where(
+            (VarianteProducto variante) =>
+                (tallaId == null || variante.tallaId == tallaId) &&
+                (colorId == null || variante.colorId == colorId),
+          )
+          .map((VarianteProducto variante) => variante.id)
+          .toSet();
     }
+
+    String? temporadaNombre;
+    if (temporadaId != null) {
+      try {
+        final CatalogoFiltros filtros = await obtenerFiltros();
+        temporadaNombre = filtros.nombreOpcion(filtros.temporadas, temporadaId);
+      } catch (_) {
+        temporadaNombre = null;
+      }
+    }
+
+    final Map<int, List<DisponibilidadVariante>> porSucursal =
+        <int, List<DisponibilidadVariante>>{};
+    final Map<int, String> sucursalNombre = <int, String>{};
+    for (final DisponibilidadVariante fila in detalle.disponibilidad) {
+      if (sucursalId != null && fila.sucursalId != sucursalId) continue;
+      if (variantesFiltradas != null &&
+          !variantesFiltradas.contains(fila.varianteId)) {
+        continue;
+      }
+      if (temporadaNombre != null &&
+          temporadaNombre.trim().isNotEmpty &&
+          fila.temporada.trim().toLowerCase() !=
+              temporadaNombre.trim().toLowerCase()) {
+        continue;
+      }
+      porSucursal
+          .putIfAbsent(fila.sucursalId, () => <DisponibilidadVariante>[])
+          .add(fila);
+      sucursalNombre.putIfAbsent(
+        fila.sucursalId,
+        () => fila.sucursal.isEmpty
+            ? 'Sucursal ${fila.sucursalId}'
+            : fila.sucursal,
+      );
+    }
+
     return DisponibilidadProducto.fromJson(<String, dynamic>{
-      'producto_id': detalle['id'], 'producto': detalle['nombre'],
-      'sucursales': porSucursal.entries.map((MapEntry<int, List<Map<String, dynamic>>> entry) => <String, dynamic>{
-        'sucursal_id': entry.key,
-        'sucursal': filas.firstWhere((Map<String, dynamic> f) => f['sucursal_id'] == entry.key)['sucursal'],
-        'variantes': entry.value,
-      }).toList(),
+      'producto_id': detalle.id,
+      'producto': detalle.nombre,
+      'sucursales': porSucursal.entries
+          .map(
+            (MapEntry<int, List<DisponibilidadVariante>> entry) =>
+                <String, dynamic>{
+                  'sucursal_id': entry.key,
+                  'sucursal': sucursalNombre[entry.key],
+                  'variantes': entry.value
+                      .map(
+                        (DisponibilidadVariante fila) => <String, dynamic>{
+                          'variante_id': fila.varianteId,
+                          'sku': fila.sku,
+                          'talla': fila.talla,
+                          'color': fila.color,
+                          'temporada': fila.temporada,
+                          'stock_disponible': fila.stockDisponible,
+                        },
+                      )
+                      .toList(),
+                },
+          )
+          .toList(),
     });
   }
 
-  /// Ejecuta un GET y decodifica el JSON con manejo de errores centralizado.
+  /// Ejecuta un GET público con caché aislada por empresa.
   Future<Object?> _getCached(
     String url,
     Map<String, String> query, {
     required String resource,
     required String cacheKey,
-    bool authenticated = true,
+    required String slug,
   }) async {
     final TenantSession? session = await _storage.readSession();
-    // El catálogo CU10 es público. La sesión, si existe, solo mejora el scope
-    // de caché; nunca es requisito para consultar ni se envía como JWT.
-    final String scopeKey = session?.scopeKey ?? 'public:${ApiConfig.empresaSlug}';
+    final String scopeKey = session?.scopeKey ?? 'public:$slug';
     final Uri uri = Uri.parse(url)
         .replace(queryParameters: query.isEmpty ? null : query);
 
@@ -229,22 +346,22 @@ class CatalogoService {
       response = await _client
           .get(
             uri,
-            headers: <String, String>{
-              'Accept': 'application/json',
-              if (authenticated)
-                'Authorization': 'Bearer ${await _storage.readToken() ?? ''}',
-            },
+            headers: const <String, String>{'Accept': 'application/json'},
           )
           .timeout(_timeout);
     } on TimeoutException {
       final Object? cached = await _database.getCache(
-        scopeKey, resource, cacheKey,
+        scopeKey,
+        resource,
+        cacheKey,
       );
       if (cached != null) return cached;
       throw const CatalogException(_connectionErrorMessage);
     } catch (_) {
       final Object? cached = await _database.getCache(
-        scopeKey, resource, cacheKey,
+        scopeKey,
+        resource,
+        cacheKey,
       );
       if (cached != null) return cached;
       throw const CatalogException(_connectionErrorMessage);
@@ -285,7 +402,7 @@ class CatalogoService {
   }
 
   void _asegurarConfiguracion() {
-    if (!ApiConfig.isConfigured) {
+    if (_baseUrl.isEmpty) {
       throw const CatalogException(ApiConfig.missingBaseUrlHint);
     }
   }

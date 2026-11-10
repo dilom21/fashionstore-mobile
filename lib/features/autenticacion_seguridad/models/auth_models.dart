@@ -6,7 +6,7 @@
 //   token_type   -> tokenType
 //   cliente_id   -> clienteId
 
-/// Cuerpo del request para `POST /auth/clientes/login`.
+/// Cuerpo del request para `POST /auth/tenant/login`.
 class LoginRequest {
   const LoginRequest({
     required this.correo,
@@ -26,7 +26,27 @@ class LoginRequest {
   };
 }
 
-/// Identidad del usuario autenticado devuelta por `GET /auth/me`.
+/// Empresa habilitada devuelta por `GET /auth/tenant/empresas`.
+class EmpresaTenant {
+  const EmpresaTenant({required this.slug, required this.nombreComercial});
+
+  factory EmpresaTenant.fromJson(Map<String, dynamic> json) => EmpresaTenant(
+    slug: _toString(json['slug']).trim().toLowerCase(),
+    nombreComercial: _toString(json['nombre_comercial']).trim(),
+  );
+
+  final String slug;
+  final String nombreComercial;
+
+  String get etiqueta => nombreComercial.isEmpty ? slug : nombreComercial;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'slug': slug,
+    'nombre_comercial': nombreComercial,
+  };
+}
+
+/// Identidad del usuario autenticado devuelta por `GET /auth/tenant/me`.
 class UsuarioAuth {
   const UsuarioAuth({
     required this.id,
@@ -36,6 +56,11 @@ class UsuarioAuth {
     this.empresaId = 0,
     this.empresaSlug = '',
     this.empresaNombre = '',
+    this.nombre = '',
+    this.apellido = '',
+    this.sucursalId,
+    this.planCodigo = '',
+    this.permiteReportesIa = false,
   });
 
   factory UsuarioAuth.fromJson(Map<String, dynamic> json) => UsuarioAuth(
@@ -46,6 +71,11 @@ class UsuarioAuth {
     empresaId: _toInt(json['empresa_id']),
     empresaSlug: _toString(json['empresa_slug']),
     empresaNombre: _toString(json['empresa_nombre']),
+    nombre: _toString(json['nombre']),
+    apellido: _toString(json['apellido']),
+    sucursalId: _toNullableInt(json['sucursal_id']),
+    planCodigo: _toString(json['plan_codigo']),
+    permiteReportesIa: json['permite_reportes_ia'] == true,
   );
 
   final int id;
@@ -55,6 +85,13 @@ class UsuarioAuth {
   final int empresaId;
   final String empresaSlug;
   final String empresaNombre;
+  final String nombre;
+  final String apellido;
+  final int? sucursalId;
+  final String planCodigo;
+  final bool permiteReportesIa;
+
+  String get nombreCompleto => '$nombre $apellido'.trim();
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'id': id,
@@ -64,10 +101,15 @@ class UsuarioAuth {
     'empresa_id': empresaId,
     'empresa_slug': empresaSlug,
     'empresa_nombre': empresaNombre,
+    'nombre': nombre,
+    'apellido': apellido,
+    'sucursal_id': sucursalId,
+    'plan_codigo': planCodigo,
+    'permite_reportes_ia': permiteReportesIa,
   };
 }
 
-/// Datos del cliente autenticado devueltos por `POST /auth/clientes/login`.
+/// Datos del cliente autenticado devueltos por `POST /auth/tenant/login`.
 class ClienteAuth {
   const ClienteAuth({
     required this.id,
@@ -111,7 +153,7 @@ class ClienteAuth {
   };
 }
 
-/// Respuesta de `POST /auth/clientes/login`.
+/// Respuesta de `POST /auth/tenant/login`.
 class ClienteLoginResponse {
   const ClienteLoginResponse({
     required this.accessToken,
@@ -176,13 +218,14 @@ enum SexoCliente {
   final String etiqueta;
 }
 
-/// Cuerpo del request para `POST /auth/clientes/registro`.
+/// Cuerpo del request para `POST /auth/tenant/clientes/registro`.
 ///
 /// Los 9 campos son obligatorios y el backend rechaza campos extra
 /// (`model_config = ConfigDict(extra="forbid")`), por eso [toJson] emite
 /// exactamente las claves del contrato en snake_case.
 class ClienteRegistroRequest {
   const ClienteRegistroRequest({
+    required this.empresaSlug,
     required this.correo,
     required this.password,
     required this.passwordConfirmacion,
@@ -194,6 +237,8 @@ class ClienteRegistroRequest {
     required this.fechaNacimiento,
   });
 
+  /// Empresa seleccionada por el cliente; el backend la valida.
+  final String empresaSlug;
   final String correo;
   final String password;
   final String passwordConfirmacion;
@@ -205,6 +250,7 @@ class ClienteRegistroRequest {
   final DateTime fechaNacimiento;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+    'empresa_slug': empresaSlug.trim().toLowerCase(),
     'correo': correo,
     'password': password,
     'password_confirmacion': passwordConfirmacion,
@@ -217,7 +263,7 @@ class ClienteRegistroRequest {
   };
 }
 
-/// Respuesta de `POST /auth/clientes/registro` (201).
+/// Respuesta de `POST /auth/tenant/clientes/registro` (201).
 ///
 /// No incluye `access_token`: el registro NO inicia sesión, así que este
 /// modelo no se guarda en `AuthStorage`.

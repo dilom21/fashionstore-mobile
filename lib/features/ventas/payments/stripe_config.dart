@@ -28,7 +28,7 @@ class StripeConfig {
   static const String returnUrl = 'vantermen://stripe-redirect';
 
   /// Nombre del comercio mostrado por el PaymentSheet.
-  static const String merchantDisplayName = 'VANTER MEN';
+  static const String merchantDisplayName = 'FashionStore';
 
   /// Mensaje seguro cuando la publishable key no está configurada.
   static const String missingKeyMessage = 'Pago electrónico no configurado.';

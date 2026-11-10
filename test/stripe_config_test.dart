@@ -29,6 +29,6 @@ void main() {
       StripeConfig.returnUrl.startsWith('${StripeConfig.urlScheme}://'),
       isTrue,
     );
-    expect(StripeConfig.merchantDisplayName, 'VANTER MEN');
+    expect(StripeConfig.merchantDisplayName, 'FashionStore');
   });
 }

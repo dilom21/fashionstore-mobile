@@ -4,61 +4,44 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/config/api_config.dart';
-import '../../../core/offline/local_database.dart';
-import '../../../core/offline/offline_operation.dart';
-import '../../../core/offline/offline_queue.dart';
 import '../../../core/storage/auth_storage.dart';
+import '../../../core/storage/tenant_session.dart';
 import '../models/venta_digital_model.dart';
 
 /// Error de la compra digital con un mensaje apto para mostrar al cliente.
-///
-/// [unauthorized] indica que el JWT fue rechazado (hay que cerrar la sesión
-/// local). [conflicto] indica un 409 del backend (stock, carrito convertido,
-/// venta ya preparada, carrito no activo, etc.).
 class VentaDigitalException implements Exception {
   const VentaDigitalException(
     this.message, {
     this.statusCode,
     this.unauthorized = false,
     this.conflicto = false,
-    this.queuedOffline = false,
   });
 
   final String message;
   final int? statusCode;
   final bool unauthorized;
   final bool conflicto;
-  final bool queuedOffline;
 
   @override
   String toString() => 'VentaDigitalException($statusCode): $message';
 }
 
-/// Servicio de la compra digital del CLIENTE (CU19).
+/// Servicio de la compra digital ONLINE del CLIENTE (CU14/CU19 SaaS).
 ///
-/// Flujo: Page -> Service -> Backend FastAPI.
-/// Endpoint consumido (requiere JWT de contexto cliente):
-///   POST /ventas/digital
+/// Endpoint: `POST /tenant/ventas/digital` con `{carrito_id, canal: MOVIL}`.
+/// El backend deriva cliente, sucursal, prendas, precios y total del carrito.
 ///
-/// El backend obtiene el cliente desde `get_current_cliente` y deriva sucursal,
-/// prendas, cantidades y precios del carrito almacenado: la app solo envía
-/// `carrito_id` y `canal` (siempre `MOVIL`).
+/// No existe cola offline de ventas: un fallo de red no crea ni confirma una
+/// compra. La referencia de un checkout ya creado se conserva aparte para
+/// recuperar el pago sin duplicar la venta.
 class VentaDigitalService {
-  /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
-  ///
-  /// [baseUrl] es un punto de inyección para pruebas; en producción se usa
-  /// siempre `ApiConfig.baseUrl`.
   VentaDigitalService({
     AuthStorage? storage,
     http.Client? client,
     String? baseUrl,
-    OfflineQueue? queue,
-    LocalDatabase? database,
   }) : _storage = storage ?? AuthStorage(),
        _client = client ?? http.Client(),
-       _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim(),
-       _queue = queue ?? OfflineQueue(storage: storage, database: database),
-       _database = database ?? LocalDatabase.instance;
+       _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim();
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -82,97 +65,90 @@ class VentaDigitalService {
       'El stock cambió y no alcanza para completar la compra. Revisa tu carrito.';
   static const String _conflictVentaMessage =
       'Este carrito ya fue convertido en una venta.';
-  static const String _conflictActivoMessage =
-      'El carrito ya no está activo para comprar.';
-  static const String _conflictVacioMessage =
-      'El carrito no contiene prendas para comprar.';
 
   final AuthStorage _storage;
   final http.Client _client;
   final String _baseUrl;
-  final OfflineQueue _queue;
-  final LocalDatabase _database;
 
-  /// Convierte el carrito ACTIVO en una venta digital PENDIENTE
-  /// (`POST /ventas/digital`).
-  ///
-  /// Solo se envía `carrito_id` y `canal`: el backend valida el cliente, el
-  /// carrito, los items, el stock, la sucursal, los precios y el total.
+  /// Convierte el carrito ACTIVO en una venta digital PENDIENTE.
   Future<VentaDigital> realizarCompra(int carritoId) async {
-    final Map<String, dynamic> payload = <String, dynamic>{
-      'carrito_id': carritoId,
-      'canal': canalMovil,
-    };
-    OfflineOperation? operation;
-    try {
-      operation = await _queue.add('venta_digital', payload);
-      await _database.updateOperation(
-        operation.operationId,
-        OfflineOperationStatus.enviado,
-        incrementAttempt: true,
-      );
-    } catch (_) {
-      // En pruebas unitarias sin plugin SQLite se conserva el envío online.
-    }
-    final Object? data;
-    try {
-      data = await _enviar(
-        'POST',
-        ApiConfig.ventasDigitalUrlDesde(_baseUrl),
-        body: payload,
-        operationId: operation?.operationId,
-      );
-      if (operation != null) {
-        await _database.updateOperation(
-          operation.operationId,
-          OfflineOperationStatus.confirmado,
-        );
-      }
-    } on VentaDigitalException catch (error) {
-      if (operation != null) {
-        await _database.updateOperation(
-          operation.operationId,
-          error.conflicto
-              ? OfflineOperationStatus.conflicto
-              : OfflineOperationStatus.pendiente,
-          error: error.message,
-        );
-      }
-      if (operation != null && error.statusCode == null) {
-        throw const VentaDigitalException(
-          'Compra guardada sin conexión. Se sincronizará automáticamente.',
-          queuedOffline: true,
-        );
-      }
-      rethrow;
-    }
+    final Object? data = await _enviar(
+      'POST',
+      ApiConfig.ventasDigitalUrlDesde(_baseUrl),
+      body: <String, dynamic>{'carrito_id': carritoId, 'canal': canalMovil},
+    );
     if (data is! Map) {
       throw const VentaDigitalException(_unexpectedErrorMessage);
     }
+    late final VentaDigital venta;
     try {
-      return VentaDigital.fromJson(data.cast<String, dynamic>());
+      venta = VentaDigital.fromJson(data.cast<String, dynamic>());
     } catch (_) {
       throw const VentaDigitalException(_unexpectedErrorMessage);
     }
+    await guardarCheckoutPendiente(venta);
+    return venta;
   }
 
-  // -------------------------------------------------------------------------
-  // HTTP
-  // -------------------------------------------------------------------------
+  /// Guarda la referencia segura del checkout para recuperarlo después.
+  Future<void> guardarCheckoutPendiente(VentaDigital venta) async {
+    try {
+      final TenantSession? session = await _storage.readSession();
+      if (session == null) return;
+      await _storage.savePendingCheckout(
+        session.scopeKey,
+        PendingCheckout(
+          ventaId: venta.ventaId,
+          carritoId: venta.carritoId ?? 0,
+          total: venta.total,
+          empresaSlug: session.empresaSlug,
+          sucursalNombre: venta.sucursalNombre,
+          estado: venta.estado,
+        ),
+      );
+    } catch (_) {
+      // La referencia es una ayuda de recuperación; no bloquea la compra.
+    }
+  }
 
-  /// Ejecuta la petición autenticada y decodifica el JSON.
-  ///
-  /// Centraliza el `Authorization: Bearer`, los códigos de estado y los
-  /// mensajes de error para que la página no maneje HTTP directamente.
+  /// Devuelve el checkout pendiente del carrito, si pertenece al scope actual.
+  Future<PendingCheckout?> leerCheckoutPendiente(int carritoId) async {
+    try {
+      final TenantSession? session = await _storage.readSession();
+      if (session == null) return null;
+      final PendingCheckout? checkout = await _storage.readPendingCheckout(
+        session.scopeKey,
+      );
+      if (checkout == null || checkout.carritoId != carritoId) return null;
+      return checkout;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Elimina la referencia del checkout (tras pago confirmado o descarte).
+  Future<void> limpiarCheckoutPendiente(int ventaId) async {
+    try {
+      final TenantSession? session = await _storage.readSession();
+      if (session == null) return;
+      final PendingCheckout? checkout = await _storage.readPendingCheckout(
+        session.scopeKey,
+      );
+      if (checkout?.ventaId == ventaId) {
+        await _storage.clearPendingCheckout(session.scopeKey);
+      }
+    } catch (_) {
+      // Sin efecto sobre el flujo principal.
+    }
+  }
+
   Future<Object?> _enviar(
     String metodo,
     String url, {
     Map<String, dynamic>? body,
-    String? operationId,
   }) async {
     _asegurarConfiguracion();
     final Map<String, String> headers = await _headers(conCuerpo: body != null);
-    if (operationId != null) headers['Idempotency-Key'] = operationId;
     final Uri uri = Uri.parse(url);
 
     final http.Response response;
@@ -192,7 +168,6 @@ class VentaDigitalService {
         response.statusCode == 201 ||
         response.statusCode == 204) {
       final String cuerpo = response.body.trim();
-      // CU19 siempre devuelve la venta creada.
       if (cuerpo.isEmpty) {
         throw const VentaDigitalException(_unexpectedErrorMessage);
       }
@@ -206,7 +181,6 @@ class VentaDigitalService {
     throw _errorDesde(response);
   }
 
-  /// Traduce el código de estado a un error con mensaje para el cliente.
   VentaDigitalException _errorDesde(http.Response response) {
     switch (response.statusCode) {
       case 401:
@@ -235,25 +209,21 @@ class VentaDigitalService {
     }
   }
 
-  /// Clasifica el 409 en un mensaje seguro para el cliente.
-  ///
-  /// El backend distingue stock, carrito convertido, carrito no activo y
-  /// carrito vacío; se reconocen por palabras clave y, si no, se conserva el
-  /// `detail` de negocio ya validado (nunca SQL ni trazas).
   String _mensajeConflicto(http.Response response) {
     final String? detalle = _detalleDeError(response);
     final String texto = (detalle ?? '').toLowerCase();
 
     if (texto.contains('stock')) return _conflictStockMessage;
     if (texto.contains('convertid')) return _conflictVentaMessage;
-    if (texto.contains('activo')) return _conflictActivoMessage;
+    if (texto.contains('activo')) {
+      return 'El carrito ya no está activo para comprar.';
+    }
     if (texto.contains('prenda') || texto.contains('vac')) {
-      return _conflictVacioMessage;
+      return 'El carrito no contiene prendas para comprar.';
     }
     return detalle ?? _conflictMessage;
   }
 
-  /// Extrae `detail` del backend solo si es un mensaje breve y no técnico.
   String? _detalleDeError(http.Response response) {
     try {
       final Object? data = jsonDecode(response.body);
@@ -280,7 +250,6 @@ class VentaDigitalService {
     }
   }
 
-  /// Cabeceras de la petición, con el JWT del cliente.
   Future<Map<String, String>> _headers({required bool conCuerpo}) async {
     final String? token;
     try {

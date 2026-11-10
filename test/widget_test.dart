@@ -17,7 +17,7 @@ void main() {
   testWidgets('Muestra el login cuando no hay sesión guardada', (tester) async {
     await _pumpApp(tester);
 
-    expect(find.text('VANTER MEN'), findsWidgets);
+    expect(find.text('FASHIONSTORE'), findsWidgets);
     expect(find.text('INICIAR SESIÓN'), findsOneWidget);
   });
 

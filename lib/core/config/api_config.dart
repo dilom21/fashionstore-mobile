@@ -1,10 +1,13 @@
-/// Configuración central de acceso al backend FastAPI de VANTER MEN.
+/// Configuración central de acceso al backend FastAPI SaaS de FashionStore.
 ///
 /// Toda dirección o ruta del backend se declara aquí y se consume desde este
 /// punto. No se hardcodean URLs en páginas, widgets ni servicios.
 ///
 /// La URL base se inyecta en tiempo de compilación, por ejemplo:
 ///   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+///
+/// La empresa activa NO es una constante de compilación: se obtiene de la
+/// sesión tenant (`TenantSession.empresaSlug`) elegida por el cliente.
 class ApiConfig {
   /// Clase de solo constantes: no debe instanciarse.
   const ApiConfig._();
@@ -15,77 +18,75 @@ class ApiConfig {
   /// - Emulador Android: `http://10.0.2.2:8000`
   /// - Teléfono por USB: `http://127.0.0.1:8000` (con `adb reverse tcp:8000 tcp:8000`)
   static const String baseUrl = String.fromEnvironment('API_BASE_URL');
-  /// Tenant público de esta compilación; reemplazar con EMPRESA_SLUG al
-  /// publicar otra tienda. No es una autorización: el backend valida el slug.
-  static const String empresaSlug = String.fromEnvironment(
-    'EMPRESA_SLUG', defaultValue: 'vanter-men',
-  );
 
   /// Indica si `API_BASE_URL` fue definida al compilar la aplicación.
   static bool get isConfigured => baseUrl.trim().isNotEmpty;
 
-  /// Endpoint de inicio de sesión de CLIENTES.
-  ///
-  /// Flutter es exclusivamente para clientes; NO se debe usar la ruta de
-  /// personal (`/auth/personal/login`).
+  // ---------------------------------------------------------------------------
+  // Autenticación / registro SaaS
+  // ---------------------------------------------------------------------------
+
+  /// Empresas habilitadas para el selector público de login/registro.
+  static String get empresasTenantUrl => '$baseUrl/auth/tenant/empresas';
+
+  /// Login de CLIENTES con `empresa_slug` explícito.
   static String get clientesLoginUrl => '$baseUrl/auth/tenant/login';
 
-  /// Endpoint PÚBLICO de registro de cuenta de CLIENTE (no requiere JWT).
-  ///
-  /// Devuelve 201 con la cuenta creada y **sin** token: el cliente inicia
-  /// sesión después con [clientesLoginUrl].
-  static String get clientesRegistroUrl => '$baseUrl/auth/clientes/registro';
+  /// Registro SaaS de clientes (público, no emite token).
+  static String get clientesRegistroUrl =>
+      '$baseUrl/auth/tenant/clientes/registro';
 
-  /// Endpoint para obtener el usuario autenticado actual.
+  /// Identidad empresarial del usuario autenticado (contexto CLIENTE).
   static String get authMeUrl => '$baseUrl/auth/tenant/me';
 
-  /// Registro heredado. Solo se conserva como flujo online explícito porque el
-  /// backend todavía no expone registro público tenant.
-  static String get clientesRegistroLegacyUrl =>
-      '$baseUrl/auth/clientes/registro';
-
   // ---------------------------------------------------------------------------
-  // CU09 - Catálogo público (sin autenticación)
+  // Catálogo público SaaS (sin autenticación)
   // ---------------------------------------------------------------------------
 
-  /// Endpoint de listado de productos activos con filtros opcionales.
-  static String get productosUrl => '$baseUrl/catalogo/public/$empresaSlug/productos';
-  static String get productosLegacyUrl => '$baseUrl/productos';
+  /// Listado público paginado de productos de una empresa.
+  static String catalogoProductosUrl(String empresaSlug) =>
+      catalogoProductosUrlDesde(baseUrl, empresaSlug);
 
-  /// Endpoint de detalle de un producto (incluye recursos y variantes).
-  static String productoDetalleUrl(int productoId) =>
-      '$baseUrl/catalogo/public/$empresaSlug/productos/$productoId';
-  static String productoDetalleLegacyUrl(int productoId) =>
-      '$baseUrl/productos/$productoId';
+  static String catalogoProductosUrlDesde(String base, String empresaSlug) =>
+      '$base/catalogo/public/${Uri.encodeComponent(empresaSlug)}/productos';
 
-  /// Endpoint de disponibilidad de un producto por sucursal.
-  static String productoDisponibilidadUrl(int productoId) =>
-      '$baseUrl/productos/$productoId/disponibilidad';
+  /// Detalle público de un producto (variantes, recursos y disponibilidad).
+  static String catalogoProductoDetalleUrl(
+    String empresaSlug,
+    int productoId,
+  ) => catalogoProductoDetalleUrlDesde(baseUrl, empresaSlug, productoId);
 
-  /// Endpoint de opciones de filtros del catálogo.
-  static String get catalogoFiltrosUrl =>
-      '$baseUrl/catalogo/public/$empresaSlug/filtros';
+  static String catalogoProductoDetalleUrlDesde(
+    String base,
+    String empresaSlug,
+    int productoId,
+  ) =>
+      '$base/catalogo/public/${Uri.encodeComponent(empresaSlug)}'
+      '/productos/$productoId';
+
+  /// Opciones de filtros del catálogo público de una empresa.
+  static String catalogoFiltrosUrl(String empresaSlug) =>
+      catalogoFiltrosUrlDesde(baseUrl, empresaSlug);
+
+  static String catalogoFiltrosUrlDesde(String base, String empresaSlug) =>
+      '$base/catalogo/public/${Uri.encodeComponent(empresaSlug)}/filtros';
 
   // ---------------------------------------------------------------------------
   // CU15 - Carrito del CLIENTE (requiere JWT de contexto cliente)
   // ---------------------------------------------------------------------------
 
-  /// Endpoint para agregar una prenda al carrito activo de la sucursal.
   static String get carritoItemsUrl => '$baseUrl/tenant/carritos/items';
 
-  /// Endpoint del listado de carritos activos del cliente.
   static String get carritosUrl => '$baseUrl/tenant/carritos';
 
-  /// Endpoint del detalle de un carrito.
   static String carritoDetalleUrl(int carritoId) =>
       '$baseUrl/tenant/carritos/$carritoId';
 
-  /// Endpoint de una línea concreta del carrito.
   static String carritoItemUrl(int carritoId, int detalleId) =>
       '$baseUrl/tenant/carritos/$carritoId/items/$detalleId';
 
   // ---------------------------------------------------------------------------
-  // Asistencia Inteligente (requiere JWT de contexto cliente)
+  // Asistencia Inteligente (temporalmente no disponible en la navegación SaaS)
   // ---------------------------------------------------------------------------
 
   static String get asistenciaRecomendacionesUrl =>
@@ -95,112 +96,81 @@ class ApiConfig {
       '$base/tenant/asistencia-inteligente/recomendaciones';
 
   // ---------------------------------------------------------------------------
-  // CU16 - Reserva de prendas del CLIENTE (requiere JWT de contexto cliente)
+  // CU16 - Reservas online del CLIENTE (requiere JWT de contexto cliente)
   // ---------------------------------------------------------------------------
 
-  /// Endpoint de creación (`POST`) y listado (`GET`) de reservas.
-  static String get reservasUrl => '$baseUrl/tenant/cliente/reservas';
+  /// Listado (`GET`) y creación (`POST`) de reservas online.
+  static String get reservasUrl => '$baseUrl/tenant/reservas';
   static String get reservasCrearUrl => '$baseUrl/tenant/reservas';
 
-  /// Endpoint del detalle de una reserva.
+  /// Detalle real de una reserva del cliente.
   static String reservaDetalleUrl(int reservaId) =>
-      '$baseUrl/reservas/$reservaId';
+      '$baseUrl/tenant/reservas/$reservaId';
 
-  /// Endpoint de cancelación de una reserva.
+  /// Cancelación de una reserva.
   static String reservaCancelarUrl(int reservaId) =>
       '$baseUrl/tenant/reservas/$reservaId/cancelar';
 
   // ---------------------------------------------------------------------------
-  // CU19 - Compra digital del CLIENTE (requiere JWT de contexto cliente)
+  // CU14/CU19 - Compra digital del CLIENTE
   // ---------------------------------------------------------------------------
 
-  /// Endpoint de creación de la venta digital (`POST`).
-  ///
-  /// Convierte un carrito ACTIVO en una venta PENDIENTE. El cliente solo envía
-  /// `carrito_id` y `canal`; el resto lo deriva el backend del carrito.
   static String get ventasDigitalUrl => ventasDigitalUrlDesde(baseUrl);
 
-  /// Endpoint de creación de la venta digital para una URL base dada.
-  ///
-  /// Se parametriza para poder probar el servicio sin depender de
-  /// `--dart-define=API_BASE_URL`.
   static String ventasDigitalUrlDesde(String base) =>
       '$base/tenant/ventas/digital';
 
-  /// Endpoint for tenant cash sales.
+  /// Ruta interna heredada para venta de contado (no usada por el flujo de
+  /// cliente SaaS; se conserva para la infraestructura offline deshabilitada).
   static String get ventaContadoUrl => '$baseUrl/tenant/ventas/contado';
 
   // ---------------------------------------------------------------------------
-  // CU22 - Pago electrónico del CLIENTE con Stripe (requiere JWT de cliente)
+  // CU22 - Pago electrónico del CLIENTE con Stripe
   // ---------------------------------------------------------------------------
 
-  /// Endpoint de creación/reutilización del PaymentIntent (`POST`).
-  ///
-  /// El cliente solo envía `venta_id`; el monto, la moneda y la metadata los
-  /// deriva el backend de la venta.
   static String get stripeIntencionUrl => stripeIntencionUrlDesde(baseUrl);
 
-  /// Endpoint de creación de la intención para una URL base dada.
-  ///
-  /// Se parametriza para poder probar el servicio sin depender de
-  /// `--dart-define=API_BASE_URL`.
   static String stripeIntencionUrlDesde(String base) =>
       '$base/tenant/pagos/stripe/intencion';
 
-  /// Endpoint del estado backend de la venta y su pago electrónico (`GET`).
   static String stripeEstadoVentaUrl(int ventaId) =>
       stripeEstadoVentaUrlDesde(baseUrl, ventaId);
 
-  /// Endpoint de consulta de estado para una URL base dada.
   static String stripeEstadoVentaUrlDesde(String base, int ventaId) =>
       '$base/tenant/pagos/stripe/ventas/$ventaId/estado';
 
   // ---------------------------------------------------------------------------
-  // CU23 - Comprobante de venta del CLIENTE (requiere JWT de contexto cliente)
+  // CU23 - Comprobante de venta del CLIENTE
   // ---------------------------------------------------------------------------
 
-  /// Endpoint del comprobante de una venta (`GET`, solo lectura).
+  /// Ruta real SaaS para el comprobante del CLIENTE autenticado.
   ///
-  /// El backend valida que la venta sea del cliente autenticado, que esté
-  /// COMPLETADA y que tenga un pago APROBADO; devuelve el comprobante ya
-  /// construido. No persiste nada.
+  /// `GET /tenant/ventas/{venta_id}/comprobante` pertenece al personal con
+  /// permiso GESTIONAR_VENTAS. El cliente debe usar la ruta colgada de su
+  /// historial, que valida propiedad y estado.
   static String comprobanteVentaUrl(int ventaId) =>
       comprobanteVentaUrlDesde(baseUrl, ventaId);
 
-  /// Endpoint del comprobante para una URL base dada.
-  ///
-  /// Se parametriza para poder probar el servicio sin depender de
-  /// `--dart-define=API_BASE_URL`.
   static String comprobanteVentaUrlDesde(String base, int ventaId) =>
-      '$base/tenant/ventas/$ventaId/comprobante';
+      '$base/tenant/ventas/historial/$ventaId/comprobante';
 
   // ---------------------------------------------------------------------------
-  // CU24 - Historial de compras del CLIENTE (requiere JWT de contexto cliente)
+  // CU24 - Historial de compras del CLIENTE
   // ---------------------------------------------------------------------------
 
-  /// Endpoint del historial paginado del cliente autenticado (`GET`).
-  ///
-  /// El backend identifica al cliente por el JWT: la app nunca envía
-  /// `cliente_id`.
   static String get historialComprasUrl => historialComprasUrlDesde(baseUrl);
 
-  /// Endpoint del historial para una URL base dada.
-  ///
-  /// Se parametriza para poder probar el servicio sin depender de
-  /// `--dart-define=API_BASE_URL`.
   static String historialComprasUrlDesde(String base) =>
       '$base/tenant/ventas/historial';
 
-  /// Endpoint del detalle de una compra del historial (`GET`).
   static String historialCompraDetalleUrl(int ventaId) =>
       historialCompraDetalleUrlDesde(baseUrl, ventaId);
 
-  /// Endpoint del detalle para una URL base dada.
   static String historialCompraDetalleUrlDesde(String base, int ventaId) =>
-      '$base/ventas/historial/$ventaId';
+      '$base/tenant/ventas/historial/$ventaId';
 
   // ---------------------------------------------------------------------------
-  // CU26 - Vestidor virtual AR del CLIENTE (requiere JWT de contexto cliente)
+  // CU26 - Vestidor virtual AR (temporalmente no disponible en la navegación)
   // ---------------------------------------------------------------------------
 
   static String vestidorConfiguracionesUrl(int productoId) =>

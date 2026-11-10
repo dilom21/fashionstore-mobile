@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../asistencia_inteligente/pages/asistencia_inteligente_page.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../carrito/widgets/boton_gradiente.dart';
 
@@ -63,8 +63,6 @@ class InicioPage extends StatelessWidget {
                 onVerReservas: onVerReservas,
                 onVerCompras: onVerCompras,
               ),
-              const SizedBox(height: 12),
-              const _CtaAsistenciaInteligente(),
               const SizedBox(height: 28),
               const _BloqueMarca(),
             ],
@@ -108,7 +106,7 @@ class _MarcaInicio extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                'VANTER MEN',
+                'FASHIONSTORE',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
@@ -310,11 +308,7 @@ class _AccionesInicio extends StatelessWidget {
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            par(0, 1),
-            const SizedBox(height: 12),
-            par(2, 3),
-          ],
+          children: <Widget>[par(0, 1), const SizedBox(height: 12), par(2, 3)],
         );
       },
     );
@@ -437,7 +431,7 @@ class _BloqueMarca extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               const Text(
-                'VANTER MEN',
+                'FASHIONSTORE',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
@@ -468,75 +462,6 @@ class _BloqueMarca extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-class _CtaAsistenciaInteligente extends StatelessWidget {
-  const _CtaAsistenciaInteligente();
-
-  void _abrir(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const AsistenciaInteligentePage(),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _abrir(context),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.35),
-            ),
-          ),
-          child: const Row(
-            children: [
-              Icon(
-                Icons.auto_awesome_rounded,
-                color: AppColors.primary,
-                size: 24,
-              ),
-              SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Asistencia Inteligente',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Encuentra tu look ideal con recomendaciones personalizadas.',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.primary,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

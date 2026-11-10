@@ -7,7 +7,6 @@ import '../../carrito/models/carrito_model.dart';
 import '../../carrito/services/carrito_service.dart';
 import '../../carrito/widgets/boton_gradiente.dart';
 import '../../catalogo/widgets/producto_media.dart';
-import '../models/reserva_model.dart';
 import '../services/reserva_service.dart';
 import 'reserva_detalle_page.dart';
 
@@ -188,7 +187,7 @@ class _CrearReservaPageState extends State<CrearReservaPage> {
 
     setState(() => _enviando = true);
     try {
-      final ReservaDetalle reserva = await _service.crearReserva(
+      final ReservaCreada reserva = await _service.crearReserva(
         carritoId: widget.carritoId,
         fechaAtencion: fechaAtencion,
         observacion: _observacionController.text,

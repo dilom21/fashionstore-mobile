@@ -44,9 +44,10 @@ class CarritoException implements Exception {
 /// envía `cliente_id`.
 class CarritoService {
   /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
-  CarritoService({AuthStorage? storage, http.Client? client})
+  CarritoService({AuthStorage? storage, http.Client? client, String? baseUrl})
     : _storage = storage ?? AuthStorage(),
-      _client = client ?? http.Client();
+      _client = client ?? http.Client(),
+      _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim();
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -66,11 +67,35 @@ class CarritoService {
 
   final AuthStorage _storage;
   final http.Client _client;
+  final String _baseUrl;
 
-  /// Agrega una prenda al carrito activo de la sucursal (`POST /carritos/items`).
+  /// Agrega una prenda al carrito SaaS usando variante + temporada.
   ///
-  /// El backend deriva producto, variante, talla y color desde `inventarioId`,
-  /// por eso solo se envían `sucursal_id`, `inventario_id` y `cantidad`.
+  /// El backend resuelve el inventario exacto (sucursal, talla, color y
+  /// temporada) y valida el stock. Flutter NUNCA calcula `inventario_id`.
+  Future<CarritoDetalle> agregarItemVariante({
+    required int sucursalId,
+    required int varianteProductoId,
+    required int temporadaId,
+    required int cantidad,
+  }) async {
+    final Object? data = await _enviar(
+      'POST',
+      '$_baseUrl/tenant/carritos/items',
+      body: <String, dynamic>{
+        'sucursal_id': sucursalId,
+        'variante_producto_id': varianteProductoId,
+        'temporada_id': temporadaId,
+        'cantidad': cantidad,
+      },
+    );
+    return _detalleORefrescar(data);
+  }
+
+  /// Agrega una prenda mediante `inventario_id` (contrato legacy interno).
+  ///
+  /// Se conserva para la asistencia inteligente (temporalmente oculta). El
+  /// catálogo SaaS usa [agregarItemVariante].
   Future<CarritoDetalle> agregarItem({
     required int sucursalId,
     required int inventarioId,
@@ -78,7 +103,7 @@ class CarritoService {
   }) async {
     final Object? data = await _enviar(
       'POST',
-      ApiConfig.carritoItemsUrl,
+      '$_baseUrl/tenant/carritos/items',
       body: <String, dynamic>{
         'sucursal_id': sucursalId,
         'inventario_id': inventarioId,
@@ -92,7 +117,7 @@ class CarritoService {
   ///
   /// Un cliente puede tener varios carritos activos: uno por sucursal.
   Future<CarritoListaResponse> listarCarritos() async {
-    final Object? data = await _enviar('GET', ApiConfig.carritosUrl);
+    final Object? data = await _enviar('GET', '$_baseUrl/tenant/carritos');
     if (data is! Map) throw const CarritoException(_unexpectedErrorMessage);
     try {
       return CarritoListaResponse.fromJson(data.cast<String, dynamic>());
@@ -105,7 +130,7 @@ class CarritoService {
   Future<CarritoDetalle> obtenerCarrito(int carritoId) async {
     final Object? data = await _enviar(
       'GET',
-      ApiConfig.carritoDetalleUrl(carritoId),
+      '$_baseUrl/tenant/carritos/$carritoId',
     );
     return _detalleORefrescar(data);
   }
@@ -122,7 +147,7 @@ class CarritoService {
   }) async {
     final Object? data = await _enviar(
       'PATCH',
-      ApiConfig.carritoItemUrl(carritoId, detalleId),
+      '$_baseUrl/tenant/carritos/$carritoId/items/$detalleId',
       body: <String, dynamic>{'cantidad': cantidad},
     );
     return _detalleORefrescar(data, fallbackCarritoId: carritoId);
@@ -135,7 +160,7 @@ class CarritoService {
   }) async {
     final Object? data = await _enviar(
       'DELETE',
-      ApiConfig.carritoItemUrl(carritoId, detalleId),
+      '$_baseUrl/tenant/carritos/$carritoId/items/$detalleId',
     );
     return _detalleORefrescar(data, fallbackCarritoId: carritoId);
   }
@@ -148,7 +173,7 @@ class CarritoService {
   Future<CarritoDetalle> eliminarCarrito(int carritoId) async {
     final Object? data = await _enviar(
       'DELETE',
-      ApiConfig.carritoDetalleUrl(carritoId),
+      '$_baseUrl/tenant/carritos/$carritoId',
     );
     if (data == null) return CarritoDetalle.vacio(carritoId);
     return _detalleORefrescar(data, fallbackCarritoId: carritoId);
@@ -304,7 +329,8 @@ class CarritoService {
     if (json.containsKey('items') && json.containsKey('sucursal_id')) {
       return _detalleDesde(json);
     }
-    final int carritoId = _toIntLocal(json['carrito_id']) ?? fallbackCarritoId ?? 0;
+    final int carritoId =
+        _toIntLocal(json['carrito_id']) ?? fallbackCarritoId ?? 0;
     if (carritoId <= 0) throw const CarritoException(_unexpectedErrorMessage);
     try {
       return await obtenerCarrito(carritoId);
@@ -315,7 +341,7 @@ class CarritoService {
   }
 
   void _asegurarConfiguracion() {
-    if (!ApiConfig.isConfigured) {
+    if (_baseUrl.isEmpty) {
       throw const CarritoException(ApiConfig.missingBaseUrlHint);
     }
   }

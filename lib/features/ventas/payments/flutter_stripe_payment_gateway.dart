@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
+import '../../../core/storage/auth_storage.dart';
+import '../../../core/storage/tenant_session.dart';
 import 'stripe_config.dart';
 import 'stripe_payment_gateway.dart';
 
@@ -33,10 +35,18 @@ class FlutterStripePaymentGateway implements StripePaymentGateway {
 
   @override
   Future<void> initPaymentSheet({required String clientSecret}) async {
+    String merchantName = StripeConfig.merchantDisplayName;
+    try {
+      final TenantSession? session = await AuthStorage().readSession();
+      final String nombre = session?.empresaNombre.trim() ?? '';
+      if (nombre.isNotEmpty) merchantName = nombre;
+    } catch (_) {
+      // Si no se puede leer la sesión se conserva el nombre genérico.
+    }
     await Stripe.instance.initPaymentSheet(
       paymentSheetParameters: SetupPaymentSheetParameters(
         paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: StripeConfig.merchantDisplayName,
+        merchantDisplayName: merchantName,
         returnURL: StripeConfig.returnUrl,
         style: ThemeMode.dark,
       ),

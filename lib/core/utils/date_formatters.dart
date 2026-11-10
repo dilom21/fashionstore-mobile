@@ -38,4 +38,19 @@ String formatearIsoLocal(DateTime fecha) {
       ':${_dosDigitos(local.second)}';
 }
 
+/// Construye el ISO 8601 con zona horaria explícita.
+///
+/// El contrato SaaS de reservas exige un `datetime` aware; Pydantic rechaza
+/// (422) un valor sin zona. Se envía el offset local, por ejemplo
+/// `2026-11-10T10:30:00-04:00`.
+String formatearIsoConZona(DateTime fecha) {
+  final DateTime local = fecha.toLocal();
+  final Duration offset = local.timeZoneOffset;
+  final String signo = offset.isNegative ? '-' : '+';
+  final int minutos = offset.inMinutes.abs();
+  final String zona =
+      '$signo${_dosDigitos(minutos ~/ 60)}:${_dosDigitos(minutos % 60)}';
+  return '${formatearIsoLocal(local)}$zona';
+}
+
 String _dosDigitos(int valor) => valor.toString().padLeft(2, '0');

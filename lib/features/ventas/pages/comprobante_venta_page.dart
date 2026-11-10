@@ -438,7 +438,7 @@ class _MarcaComprobante extends StatelessWidget {
     return const Column(
       children: <Widget>[
         Text(
-          'VANTER MEN',
+          'FASHIONSTORE',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w800,
@@ -648,7 +648,7 @@ class _HojaComprobante extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            'VANTER MEN - Moda que te define',
+            'FASHIONSTORE - Moda que te define',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 11, color: AppColors.textMuted),
           ),

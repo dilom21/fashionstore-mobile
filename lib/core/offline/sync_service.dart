@@ -10,7 +10,11 @@ import 'local_database.dart';
 import 'offline_operation.dart';
 
 class SyncReport {
-  const SyncReport({required this.confirmed, required this.conflicts, required this.pending});
+  const SyncReport({
+    required this.confirmed,
+    required this.conflicts,
+    required this.pending,
+  });
   final int confirmed;
   final int conflicts;
   final int pending;
@@ -25,11 +29,21 @@ class OfflineSyncService {
        _database = database ?? LocalDatabase.instance,
        _client = client ?? http.Client();
 
+  /// La sincronización comercial permanece DESACTIVADA en esta etapa.
+  ///
+  /// Reservas/ventas offline aún no tienen idempotencia durable ni atomicidad
+  /// PostgreSQL certificadas. No se procesan operaciones pendientes
+  /// automáticamente; se retomará en CU19-CU22.
+  static const bool comercialSyncEnabled = false;
+
   final AuthStorage _storage;
   final LocalDatabase _database;
   final http.Client _client;
 
   Future<SyncReport> synchronize() async {
+    if (!comercialSyncEnabled) {
+      return const SyncReport(confirmed: 0, conflicts: 0, pending: 0);
+    }
     final TenantSession? session = await _storage.readSession();
     final String? token = await _storage.readToken();
     if (session == null || token == null || token.isEmpty) {
@@ -38,14 +52,16 @@ class OfflineSyncService {
     int confirmed = 0;
     int conflicts = 0;
     int pending = 0;
-    for (final OfflineOperation operation in await _database.pending(session.scopeKey)) {
+    for (final OfflineOperation operation in await _database.pending(
+      session.scopeKey,
+    )) {
       final String? url = operation.type == 'reserva'
           ? ApiConfig.reservasCrearUrl
           : operation.type == 'venta_digital'
-              ? ApiConfig.ventasDigitalUrl
-              : operation.type == 'venta_contado'
-                  ? ApiConfig.ventaContadoUrl
-                  : null;
+          ? ApiConfig.ventasDigitalUrl
+          : operation.type == 'venta_contado'
+          ? ApiConfig.ventaContadoUrl
+          : null;
       if (url == null) {
         await _database.updateOperation(
           operation.operationId,
@@ -90,7 +106,9 @@ class OfflineSyncService {
         } else if (response.statusCode >= 500) {
           await _database.updateOperation(
             operation.operationId,
-            operation.attempts >= 7 ? OfflineOperationStatus.error : OfflineOperationStatus.pendiente,
+            operation.attempts >= 7
+                ? OfflineOperationStatus.error
+                : OfflineOperationStatus.pendiente,
             error: 'HTTP ${response.statusCode}',
           );
           pending++;
@@ -98,13 +116,19 @@ class OfflineSyncService {
       } catch (_) {
         await _database.updateOperation(
           operation.operationId,
-          operation.attempts >= 7 ? OfflineOperationStatus.error : OfflineOperationStatus.pendiente,
+          operation.attempts >= 7
+              ? OfflineOperationStatus.error
+              : OfflineOperationStatus.pendiente,
           error: 'Sin conexión',
           retryDelaySeconds: 1 << operation.attempts,
         );
         pending++;
       }
     }
-    return SyncReport(confirmed: confirmed, conflicts: conflicts, pending: pending);
+    return SyncReport(
+      confirmed: confirmed,
+      conflicts: conflicts,
+      pending: pending,
+    );
   }
 }

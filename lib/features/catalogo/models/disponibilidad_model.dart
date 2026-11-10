@@ -75,6 +75,8 @@ class DisponibilidadVariante {
     required this.color,
     required this.temporada,
     required this.stockDisponible,
+    this.sucursalId = 0,
+    this.sucursal = '',
   });
 
   factory DisponibilidadVariante.fromJson(Map<String, dynamic> json) =>
@@ -85,6 +87,8 @@ class DisponibilidadVariante {
         color: _toString(json['color']),
         temporada: _toString(json['temporada']),
         stockDisponible: _toInt(json['stock_disponible']),
+        sucursalId: _toInt(json['sucursal_id']),
+        sucursal: _toString(json['sucursal']),
       );
 
   final int varianteId;
@@ -95,6 +99,10 @@ class DisponibilidadVariante {
 
   /// Stock tal como lo entrega el backend.
   final int stockDisponible;
+
+  /// Sucursal de la fila (contrato público SaaS).
+  final int sucursalId;
+  final String sucursal;
 
   bool get tieneStock => stockDisponible > 0;
 }

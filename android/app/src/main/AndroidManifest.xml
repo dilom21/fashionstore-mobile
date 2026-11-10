@@ -1,9 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Acceso HTTPS al backend SaaS (también requerido en release). -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Permiso de cámara requerido por el Vestidor Virtual (CU26, etapa 1). -->
     <uses-permission android:name="android.permission.CAMERA" />
 
     <application
-        android:label="fashionstore_mobile"
+        android:label="FashionStore"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

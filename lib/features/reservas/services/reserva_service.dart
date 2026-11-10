@@ -4,9 +4,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/config/api_config.dart';
-import '../../../core/offline/local_database.dart';
-import '../../../core/offline/offline_operation.dart';
-import '../../../core/offline/offline_queue.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/utils/date_formatters.dart';
 import '../models/reserva_model.dart';
@@ -22,42 +19,64 @@ class ReservaException implements Exception {
     this.statusCode,
     this.unauthorized = false,
     this.conflicto = false,
-    this.queuedOffline = false,
   });
 
   final String message;
   final int? statusCode;
   final bool unauthorized;
   final bool conflicto;
-  final bool queuedOffline;
 
   @override
   String toString() => 'ReservaException($statusCode): $message';
 }
 
-/// Servicio de reserva de prendas del CLIENTE (CU16).
+/// Resultado real de `POST /tenant/reservas`.
+class ReservaCreada {
+  const ReservaCreada({
+    required this.reservaId,
+    required this.carritoId,
+    required this.estado,
+  });
+
+  factory ReservaCreada.fromJson(Map<String, dynamic> json) => ReservaCreada(
+    reservaId: _toInt(json['reserva_id']),
+    carritoId: _toInt(json['carrito_id']),
+    estado: _toString(json['estado']),
+  );
+
+  final int reservaId;
+  final int carritoId;
+  final String estado;
+}
+
+/// Resultado real de `PATCH /tenant/reservas/{id}/cancelar`.
+class ReservaEstado {
+  const ReservaEstado({required this.reservaId, required this.estado});
+
+  factory ReservaEstado.fromJson(Map<String, dynamic> json) => ReservaEstado(
+    reservaId: _toInt(json['reserva_id']),
+    estado: _toString(json['estado']),
+  );
+
+  final int reservaId;
+  final String estado;
+}
+
+/// Servicio de reservas ONLINE del CLIENTE (CU16 SaaS).
 ///
-/// Flujo: Page -> Service -> Backend FastAPI.
-/// Endpoints consumidos (todos requieren JWT de contexto cliente):
-///   POST  /reservas
-///   GET   /reservas
-///   GET   /reservas/{reserva_id}
-///   PATCH /reservas/{reserva_id}/cancelar
+/// Endpoints consumidos (JWT de contexto cliente):
+///   POST  /tenant/reservas
+///   GET   /tenant/reservas
+///   GET   /tenant/reservas/{reserva_id}
+///   PATCH /tenant/reservas/{reserva_id}/cancelar
 ///
-/// El backend obtiene el cliente desde `get_current_cliente`: la app nunca
-/// envía `cliente_id`.
+/// El backend obtiene cliente/empresa del JWT. No existe sincronización
+/// offline de reservas: un fallo de red NUNCA se presenta como confirmación.
 class ReservaService {
-  /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
-  ReservaService({
-    AuthStorage? storage,
-    http.Client? client,
-    OfflineQueue? queue,
-    LocalDatabase? database,
-  })
+  ReservaService({AuthStorage? storage, http.Client? client, String? baseUrl})
     : _storage = storage ?? AuthStorage(),
       _client = client ?? http.Client(),
-      _queue = queue ?? OfflineQueue(storage: storage, database: database),
-      _database = database ?? LocalDatabase.instance;
+      _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim();
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -81,157 +100,100 @@ class ReservaService {
 
   final AuthStorage _storage;
   final http.Client _client;
-  final OfflineQueue _queue;
-  final LocalDatabase _database;
+  final String _baseUrl;
 
-  /// Crea una reserva a partir de un carrito ACTIVO (`POST /reservas`).
-  ///
-  /// Solo se envían carrito, fecha de atención y observación: el backend deriva
-  /// sucursal, inventario, productos y cantidades desde el carrito almacenado.
-  Future<ReservaDetalle> crearReserva({
+  /// Crea una reserva a partir de un carrito ACTIVO.
+  Future<ReservaCreada> crearReserva({
     required int carritoId,
     required DateTime fechaAtencion,
     String? observacion,
   }) async {
-    final Map<String, dynamic> payload = <String, dynamic>{
-      'carrito_id': carritoId,
-      'fecha_atencion': formatearIsoLocal(fechaAtencion),
-      'observacion': _observacionOLimpiar(observacion),
-    };
-    OfflineOperation? operation;
-    try {
-      operation = await _queue.add('reserva', payload);
-      await _database.updateOperation(
-        operation.operationId,
-        OfflineOperationStatus.enviado,
-        incrementAttempt: true,
-      );
-    } catch (_) {}
-    final Object? data;
-    try {
-      data = await _enviar(
-        'POST',
-        ApiConfig.reservasCrearUrl,
-        mensajeConflicto: _conflictStockMessage,
-        body: payload,
-        operationId: operation?.operationId,
-      );
-      if (operation != null) {
-        await _database.updateOperation(
-          operation.operationId,
-          OfflineOperationStatus.confirmado,
-        );
-      }
-    } on ReservaException catch (error) {
-      if (operation != null) {
-        await _database.updateOperation(
-          operation.operationId,
-          error.conflicto
-              ? OfflineOperationStatus.conflicto
-              : OfflineOperationStatus.pendiente,
-          error: error.message,
-        );
-      }
-      if (operation != null && error.statusCode == null) {
-        throw const ReservaException(
-          'Reserva guardada sin conexión. Requiere confirmación al reconectar.',
-          queuedOffline: true,
-        );
-      }
-      rethrow;
-    }
-    return _detalleDesde(data);
+    final Object? data = await _enviar(
+      'POST',
+      '$_baseUrl/tenant/reservas',
+      mensajeConflicto: _conflictStockMessage,
+      body: <String, dynamic>{
+        'carrito_id': carritoId,
+        // El contrato SaaS exige datetime con zona horaria.
+        'fecha_atencion': formatearIsoConZona(fechaAtencion),
+        'observacion': _observacionOLimpiar(observacion),
+      },
+    );
+    if (data is! Map) throw const ReservaException(_unexpectedErrorMessage);
+    return ReservaCreada.fromJson(data.cast<String, dynamic>());
   }
 
-  /// Lista las reservas del cliente (`GET /reservas`).
-  ///
-  /// [estado] es un filtro opcional con los valores reales del backend.
-  Future<ReservaListaResponse> listarReservas({String? estado}) async {
+  /// Lista las reservas del cliente con paginación real.
+  Future<ReservaListaResponse> listarReservas({
+    String? estado,
+    int limit = 20,
+    int offset = 0,
+  }) async {
     final String filtro = (estado ?? '').trim().toUpperCase();
     final Object? data = await _enviar(
       'GET',
-      ApiConfig.reservasUrl,
-      query: filtro.isEmpty ? null : <String, String>{'estado': filtro},
+      '$_baseUrl/tenant/reservas',
+      query: <String, String>{
+        if (filtro.isNotEmpty) 'estado': filtro,
+        'limit': '$limit',
+        'offset': '$offset',
+      },
     );
-    final Object normalized = data is List
-        ? <String, dynamic>{'items': data, 'total_reservas': data.length}
-        : data ?? const <String, dynamic>{};
-    if (normalized is! Map) throw const ReservaException(_unexpectedErrorMessage);
+    if (data is! Map) throw const ReservaException(_unexpectedErrorMessage);
     try {
-      return ReservaListaResponse.fromJson(normalized.cast<String, dynamic>());
+      return ReservaListaResponse.fromJson(data.cast<String, dynamic>());
     } catch (_) {
       throw const ReservaException(_unexpectedErrorMessage);
     }
   }
 
-  /// Obtiene el detalle de una reserva (`GET /reservas/{reserva_id}`).
+  /// Obtiene el detalle real de una reserva.
   Future<ReservaDetalle> obtenerReserva(int reservaId) async {
-    final ReservaListaResponse lista = await listarReservas();
-    final ReservaResumen resumen = lista.items.firstWhere(
-      (ReservaResumen item) => item.reservaId == reservaId,
-      orElse: () => throw const ReservaException(_notFoundMessage, statusCode: 404),
+    if (reservaId <= 0) {
+      throw const ReservaException(_notFoundMessage, statusCode: 404);
+    }
+    final Object? data = await _enviar(
+      'GET',
+      '$_baseUrl/tenant/reservas/$reservaId',
     );
-    return ReservaDetalle.fromJson(<String, dynamic>{
-      'reserva_id': resumen.reservaId,
-      'carrito_id': resumen.carritoId,
-      'cliente_id': resumen.clienteId,
-      'sucursal_id': resumen.sucursalId,
-      'sucursal_nombre': resumen.sucursalNombre,
-      'fecha_reserva': resumen.fechaReserva?.toIso8601String(),
-      'fecha_atencion': resumen.fechaAtencion?.toIso8601String(),
-      'estado': resumen.estado,
-      'observacion': resumen.observacion,
-      'items': const <Object>[],
-      'cantidad_total_unidades': resumen.cantidadUnidades,
-    });
+    if (data is! Map) throw const ReservaException(_unexpectedErrorMessage);
+    try {
+      return ReservaDetalle.fromJson(data.cast<String, dynamic>());
+    } catch (_) {
+      throw const ReservaException(_unexpectedErrorMessage);
+    }
   }
 
-  /// Cancela una reserva PENDIENTE o CONFIRMADA
-  /// (`PATCH /reservas/{reserva_id}/cancelar`).
-  ///
-  /// La liberación de stock la realiza el backend: la app solo envía el motivo
-  /// opcional y consume la respuesta.
-  Future<ReservaDetalle> cancelarReserva({
+  /// Cancela una reserva PENDIENTE o CONFIRMADA.
+  Future<ReservaEstado> cancelarReserva({
     required int reservaId,
     String? observacion,
   }) async {
     final Object? data = await _enviar(
       'PATCH',
-      ApiConfig.reservaCancelarUrl(reservaId),
+      '$_baseUrl/tenant/reservas/$reservaId/cancelar',
       mensajeConflicto: _conflictCancelMessage,
       body: <String, dynamic>{'observacion': _observacionOLimpiar(observacion)},
     );
-    return _detalleDesde(data);
+    if (data is! Map) throw const ReservaException(_unexpectedErrorMessage);
+    return ReservaEstado.fromJson(data.cast<String, dynamic>());
   }
 
-  /// Normaliza la observación: recorta espacios, vacío → `null` y máximo 500.
-  ///
-  /// El backend también valida el límite; aquí solo se evita enviar ruido.
   static String? _observacionOLimpiar(String? valor) {
     final String texto = (valor ?? '').trim();
     if (texto.isEmpty) return null;
     return texto.length <= 500 ? texto : texto.substring(0, 500);
   }
 
-  // -------------------------------------------------------------------------
-  // HTTP
-  // -------------------------------------------------------------------------
-
-  /// Ejecuta la petición autenticada y decodifica el JSON.
-  ///
-  /// Centraliza el `Authorization: Bearer`, los códigos de estado y los
-  /// mensajes de error para que las páginas no manejen HTTP directamente.
   Future<Object?> _enviar(
     String metodo,
     String url, {
     Map<String, dynamic>? body,
     Map<String, String>? query,
     String? mensajeConflicto,
-    String? operationId,
   }) async {
     _asegurarConfiguracion();
     final Map<String, String> headers = await _headers(conCuerpo: body != null);
-    if (operationId != null) headers['Idempotency-Key'] = operationId;
     final Uri uri = Uri.parse(url).replace(queryParameters: query);
 
     final http.Response response;
@@ -255,7 +217,6 @@ class ReservaService {
         response.statusCode == 201 ||
         response.statusCode == 204) {
       final String cuerpo = response.body.trim();
-      // Toda operación de CU16 devuelve el detalle de la reserva.
       if (cuerpo.isEmpty) throw const ReservaException(_unexpectedErrorMessage);
       try {
         return jsonDecode(cuerpo);
@@ -267,7 +228,6 @@ class ReservaService {
     throw _errorDesde(response, mensajeConflicto: mensajeConflicto);
   }
 
-  /// Traduce el código de estado a un error con mensaje para el cliente.
   ReservaException _errorDesde(
     http.Response response, {
     String? mensajeConflicto,
@@ -299,7 +259,6 @@ class ReservaService {
     }
   }
 
-  /// Extrae `detail` del backend solo si es un mensaje breve y no técnico.
   String? _detalleDeError(http.Response response) {
     try {
       final Object? data = jsonDecode(response.body);
@@ -326,7 +285,6 @@ class ReservaService {
     }
   }
 
-  /// Cabeceras de la petición, con el JWT del cliente.
   Future<Map<String, String>> _headers({required bool conCuerpo}) async {
     final String? token;
     try {
@@ -349,18 +307,21 @@ class ReservaService {
     };
   }
 
-  ReservaDetalle _detalleDesde(Object? data) {
-    if (data is! Map) throw const ReservaException(_unexpectedErrorMessage);
-    try {
-      return ReservaDetalle.fromJson(data.cast<String, dynamic>());
-    } catch (_) {
-      throw const ReservaException(_unexpectedErrorMessage);
-    }
-  }
-
   void _asegurarConfiguracion() {
-    if (!ApiConfig.isConfigured) {
+    if (_baseUrl.isEmpty) {
       throw const ReservaException(ApiConfig.missingBaseUrlHint);
     }
   }
+}
+
+int _toInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value') ?? 0;
+}
+
+String _toString(Object? value) {
+  if (value == null) return '';
+  if (value is String) return value;
+  return value.toString();
 }

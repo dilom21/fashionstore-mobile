@@ -334,8 +334,12 @@ class LocalDatabase {
   }) async {
     final List<Map<String, Object?>> rows = await (await database).query(
       'offline_operations',
-       where: "scope_key = ? AND status IN ('pendiente','enviado') AND attempts < ? AND (next_retry_at IS NULL OR next_retry_at <= ?)",
-       whereArgs: <Object>[scopeKey, 8, DateTime.now().toUtc().toIso8601String()],
+      where: "scope_key = ? AND status IN ('pendiente','enviado') AND attempts < ? AND (next_retry_at IS NULL OR next_retry_at <= ?)",
+      whereArgs: <Object>[
+        scopeKey,
+        8,
+        DateTime.now().toUtc().toIso8601String(),
+      ],
       orderBy: 'created_at ASC',
       limit: limit,
     );
@@ -367,11 +371,20 @@ class LocalDatabase {
     );
   }
 
+  /// Elimina solo la caché de lectura de un scope, preservando las operaciones
+  /// offline (que no deben borrarse sin una política explícita).
+  Future<void> clearCacheScope(String scopeKey) async {
+    await (await database).delete(
+      'cache_entries',
+      where: 'scope_key = ?',
+      whereArgs: <Object>[scopeKey],
+    );
+  }
+
   /// Elimina los datos cacheados y las operaciones pendientes de un scope.
   ///
-  /// Se usa al cerrar sesión para que la caché y la cola offline de
-  /// `empresa:usuario` no sobrevivan en el dispositivo. La operación es
-  /// atómica: si falla, no queda una limpieza a medias entre ambas tablas.
+  /// Se mantiene para pruebas y para una futura política explícita de purga;
+  /// el cierre de sesión actual NO la usa.
   Future<void> clearScope(String scopeKey) async {
     final Database db = await database;
     await db.transaction((Transaction txn) async {

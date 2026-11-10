@@ -453,14 +453,12 @@ void main() {
     expect(vestidor.ultimaVarianteId, isNull);
   });
 
-  testWidgets('InicioPage abre AsistenciaInteligentePage desde el CTA', (
+  testWidgets('InicioPage no expone Asistencia Inteligente en SaaS', (
     tester,
   ) async {
-    final _Observer observer = _Observer();
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
-        navigatorObservers: <NavigatorObserver>[observer],
         home: InicioPage(
           onExplorarCatalogo: () {},
           onVerCarrito: () {},
@@ -471,19 +469,8 @@ void main() {
     );
 
     await tester.pump();
-    observer.pushed.clear();
-
-    final Finder asistenciaCta = find.text('Asistencia Inteligente');
-
-    await tester.scrollUntilVisible(
-      asistenciaCta,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-
-    await tester.tap(asistenciaCta);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(AsistenciaInteligentePage), findsOneWidget);
+    // La funcionalidad queda temporalmente fuera de la navegación SaaS.
+    expect(find.text('Asistencia Inteligente'), findsNothing);
+    expect(find.byType(AsistenciaInteligentePage), findsNothing);
   });
 }

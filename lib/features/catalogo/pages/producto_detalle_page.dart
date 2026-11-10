@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../carrito/widgets/agregar_al_carrito_section.dart';
 import '../../vestidor_virtual/services/vestidor_flow_service.dart';
 import '../models/catalogo_filtros_model.dart';
+import '../models/disponibilidad_model.dart';
 import '../models/producto_model.dart';
 import '../services/catalogo_service.dart';
 import '../services/offline_catalogo_reader.dart';
@@ -44,36 +45,19 @@ class ProductoDetallePage extends StatefulWidget {
 
 class _ProductoDetallePageState extends State<ProductoDetallePage> {
   late final CatalogoService _service;
-  late final VestidorFlowService _vestidorFlow;
   late final OfflineCatalogoReader _offlineReader;
   bool _cargando = true;
   String? _error;
   ProductoDetalle? _producto;
-
-  /// Evita abrir dos veces el vestidor con un doble toque.
-  bool _abriendoVestidor = false;
+  CatalogoFiltros? _filtros;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? CatalogoService();
-    _vestidorFlow = widget.vestidorFlow ?? VestidorFlowService();
     _offlineReader = widget.offlineReader ?? OfflineCatalogoReader();
+    _filtros = widget.filtros;
     _cargar();
-  }
-
-  /// Abre el flujo real del vestidor virtual (CU26) para este producto.
-  ///
-  /// No se fija variante: si el producto tiene varias configuraciones AR, el
-  /// propio flujo pide al cliente elegir el color.
-  Future<void> _probarEnVestidor() async {
-    if (_abriendoVestidor) return;
-    setState(() => _abriendoVestidor = true);
-    try {
-      await _vestidorFlow.abrirVestidor(context, productoId: widget.productoId);
-    } finally {
-      if (mounted) setState(() => _abriendoVestidor = false);
-    }
   }
 
   Future<void> _cargar() async {
@@ -83,12 +67,28 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
     });
 
     try {
-      final ProductoDetalle? local = widget.offline ? await _offlineReader.detalle(widget.productoId) : null;
-      if (widget.offline && local == null) throw const CatalogException('Producto no disponible en la descarga local.');
-      final ProductoDetalle producto = local ?? await _service.obtenerProducto(widget.productoId);
+      final ProductoDetalle? local = widget.offline
+          ? await _offlineReader.detalle(widget.productoId)
+          : null;
+      if (widget.offline && local == null) {
+        throw const CatalogException(
+          'Producto no disponible en la descarga local.',
+        );
+      }
+      final ProductoDetalle producto =
+          local ?? await _service.obtenerProducto(widget.productoId);
+      CatalogoFiltros? filtros = _filtros;
+      if (filtros == null && !widget.offline) {
+        try {
+          filtros = await _service.obtenerFiltros();
+        } catch (_) {
+          // Sin filtros no se puede resolver temporada_id; el alta se bloquea.
+        }
+      }
       if (!mounted) return;
       setState(() {
         _producto = producto;
+        _filtros = filtros;
         _cargando = false;
       });
     } on CatalogException catch (error) {
@@ -232,34 +232,30 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
             ),
           ),
           const SizedBox(height: 18),
-          AgregarAlCarritoSection(producto: producto, onRecargar: _cargar),
+          if (widget.offline)
+            const _AvisoOfflineDetalle()
+          else
+            AgregarAlCarritoSection(
+              producto: producto,
+              filtros: _filtros,
+              onRecargar: _cargar,
+            ),
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _abriendoVestidor ? null : _probarEnVestidor,
-              icon: _abriendoVestidor
-                  ? const SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.secondary,
-                        ),
-                      ),
-                    )
-                  : const Icon(Icons.checkroom_rounded, size: 18),
+              onPressed: null,
+              icon: const Icon(Icons.checkroom_rounded, size: 18),
               label: const Text(
-                'PROBAR EN VESTIDOR',
+                'VESTIDOR VIRTUAL · PRÓXIMAMENTE',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
+                  letterSpacing: 0.8,
                 ),
               ),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.secondary,
-                side: const BorderSide(color: AppColors.secondary),
+                foregroundColor: AppColors.inactive,
+                side: const BorderSide(color: AppColors.border),
                 minimumSize: const Size.fromHeight(50),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -293,13 +289,16 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
             _Chips(valores: producto.colores),
             const SizedBox(height: 20),
           ],
-          DisponibilidadSection(
-            productoId: producto.id,
-            tallas: producto.tallasOpciones,
-            colores: producto.coloresOpciones,
-            filtros: widget.filtros,
-            service: _service,
-          ),
+          if (widget.offline)
+            _DisponibilidadOffline(filas: producto.disponibilidad)
+          else
+            DisponibilidadSection(
+              productoId: producto.id,
+              tallas: producto.tallasOpciones,
+              colores: producto.coloresOpciones,
+              filtros: _filtros,
+              service: _service,
+            ),
         ],
       ),
     );
@@ -355,6 +354,103 @@ class _Chips extends StatelessWidget {
             ),
           )
           .toList(),
+    );
+  }
+}
+
+/// Aviso cuando el detalle se consulta desde la copia SQLite CU18.
+class _AvisoOfflineDetalle extends StatelessWidget {
+  const _AvisoOfflineDetalle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.offline_bolt_outlined, color: AppColors.primary, size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Estás consultando la copia local. Agregar al carrito requiere '
+              'conexión y stock confirmado por el backend.',
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.4,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Disponibilidad del último snapshot local (stock NO confirmado en vivo).
+class _DisponibilidadOffline extends StatelessWidget {
+  const _DisponibilidadOffline({required this.filas});
+
+  final List<DisponibilidadVariante> filas;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'DISPONIBILIDAD LOCAL (ÚLTIMO STOCK CONOCIDO)',
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1.4,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (filas.isEmpty)
+          const Text(
+            'Sin stock registrado en la copia local.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+          )
+        else
+          for (final DisponibilidadVariante fila in filas)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${fila.sucursal} · Talla ${fila.talla} · ${fila.color}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${fila.stockDisponible} disp.',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+      ],
     );
   }
 }

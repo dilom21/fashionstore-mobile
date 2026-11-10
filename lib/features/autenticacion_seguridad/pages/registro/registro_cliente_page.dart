@@ -9,17 +9,28 @@ import '../../utils/password_strength.dart';
 /// Registro PÚBLICO de cuenta de CLIENTE de VANTER MEN.
 ///
 /// Flujo: Login -> [Crear cuenta] -> esta pantalla ->
-/// `AuthService.registrarCliente` -> `POST /auth/clientes/registro`.
+/// `AuthService.registrarCliente` -> `POST /auth/tenant/clientes/registro`.
 ///
 /// El endpoint es público y responde 201 **sin** `access_token`: al terminar se
 /// muestra una confirmación y se vuelve al Login con el correo precargado. NO
 /// hay auto-login, NO se guarda JWT y NO se llama a `loginCliente()`.
 class RegistroClientePage extends StatefulWidget {
   /// Crea la pantalla de registro de cliente.
-  const RegistroClientePage({super.key, this.authService});
+  const RegistroClientePage({
+    super.key,
+    this.authService,
+    this.empresaSlug = '',
+    this.empresaNombre = '',
+  });
 
   /// Servicio inyectable (mismo patrón que el resto de la app).
   final AuthService? authService;
+
+  /// Empresa elegida en el login (el backend valida el slug).
+  final String empresaSlug;
+
+  /// Nombre comercial de la empresa elegida, solo para presentación.
+  final String empresaNombre;
 
   @override
   State<RegistroClientePage> createState() => _RegistroClientePageState();
@@ -212,6 +223,14 @@ class _RegistroClientePageState extends State<RegistroClientePage> {
     FocusScope.of(context).unfocus();
     setState(() => _errorMessage = null);
 
+    final String empresaSlug = widget.empresaSlug.trim().toLowerCase();
+    if (empresaSlug.isEmpty) {
+      setState(
+        () => _errorMessage = 'No se identificó la empresa. Vuelve al inicio e inténtalo nuevamente.',
+      );
+      return;
+    }
+
     final bool datosValidos = _formKey.currentState?.validate() ?? false;
 
     final SexoCliente? sexo = _sexo;
@@ -249,6 +268,7 @@ class _RegistroClientePageState extends State<RegistroClientePage> {
       final ClienteRegistroResponse respuesta = await _authService
           .registrarCliente(
             ClienteRegistroRequest(
+              empresaSlug: empresaSlug,
               correo: _correoController.text.trim().toLowerCase(),
               password: _passwordController.text,
               passwordConfirmacion: _passwordConfirmacionController.text,
@@ -320,7 +340,7 @@ class _RegistroClientePageState extends State<RegistroClientePage> {
           icon: const Icon(Icons.arrow_back_rounded),
         ),
         title: const Text(
-          'VANTER MEN',
+          'FASHIONSTORE',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w800,
@@ -408,10 +428,12 @@ class _RegistroClientePageState extends State<RegistroClientePage> {
           ),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Únete a VANTER MEN y disfruta una experiencia personalizada.',
+        Text(
+          widget.empresaSlug.trim().isEmpty
+              ? 'Completa tus datos para crear tu cuenta SaaS.'
+              : 'Creando tu cuenta en ${widget.empresaNombre.trim().isEmpty ? widget.empresaSlug : widget.empresaNombre}.',
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 13.5,
             height: 1.45,
             color: AppColors.textMuted,

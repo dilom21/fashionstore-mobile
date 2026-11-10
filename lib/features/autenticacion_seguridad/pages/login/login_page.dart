@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../inicio/pages/main_navigation_page.dart';
+import '../../models/auth_models.dart';
 import '../../services/auth_service.dart';
 import '../registro/registro_cliente_page.dart';
 
-/// Pantalla de inicio de sesión premium del CLIENTE de VANTER MEN.
+/// Pantalla de inicio de sesión del CLIENTE SaaS.
 ///
-/// Consume `POST /auth/clientes/login` a través de [AuthService]. No guarda
-/// credenciales y valida el formulario antes de enviar.
+/// Flujo: seleccionar empresa (`GET /auth/tenant/empresas`) -> credenciales ->
+/// `POST /auth/tenant/login` -> validación `/auth/tenant/me` -> área comercial.
 class LoginPage extends StatefulWidget {
-  /// Crea la pantalla de login.
   const LoginPage({super.key});
 
   @override
@@ -21,19 +21,59 @@ class _LoginPageState extends State<LoginPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _correoController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _empresaController = TextEditingController();
   final AuthService _authService = AuthService();
+
+  List<EmpresaTenant> _empresas = <EmpresaTenant>[];
+  EmpresaTenant? _empresa;
+  bool _cargandoEmpresas = true;
+  String? _errorEmpresas;
 
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+    _cargarEmpresas();
+  }
+
+  @override
   void dispose() {
     _correoController.dispose();
     _passwordController.dispose();
-    _empresaController.dispose();
     super.dispose();
+  }
+
+  /// Carga las empresas habilitadas una sola vez (sin solicitudes duplicadas).
+  Future<void> _cargarEmpresas() async {
+    if (!_cargandoEmpresas && _empresas.isNotEmpty) return;
+    setState(() {
+      _cargandoEmpresas = true;
+      _errorEmpresas = null;
+    });
+    try {
+      final List<EmpresaTenant> empresas = await _authService.listarEmpresas();
+      if (!mounted) return;
+      setState(() {
+        _empresas = empresas;
+        _empresa = empresas.isEmpty ? null : empresas.first;
+        _cargandoEmpresas = false;
+      });
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _cargandoEmpresas = false;
+        _errorEmpresas = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _cargandoEmpresas = false;
+        _errorEmpresas =
+            'No pudimos cargar las empresas. Inténtalo nuevamente.';
+      });
+    }
   }
 
   Future<void> _iniciarSesion() async {
@@ -41,17 +81,22 @@ class _LoginPageState extends State<LoginPage> {
     FocusScope.of(context).unfocus();
     setState(() => _errorMessage = null);
 
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final EmpresaTenant? empresa = _empresa;
+    final bool datosValidos = _formKey.currentState?.validate() ?? false;
+    if (!datosValidos) return;
+    if (empresa == null) {
+      setState(() => _errorMessage = 'Selecciona una empresa.');
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
       await _authService.loginCliente(
         correo: _correoController.text.trim(),
         password: _passwordController.text,
-        empresaSlug: _empresaController.text.trim(),
+        empresaSlug: empresa.slug,
       );
       if (!mounted) return;
-      // Reemplaza el login: no se puede volver con el botón atrás.
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const MainNavigationPage()),
       );
@@ -68,17 +113,23 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// Abre el registro público de cliente (CU de registro) en una pantalla
-  /// propia y precarga el correo devuelto.
-  ///
-  /// La contraseña NUNCA viaja entre pantallas: solo se recibe el correo para
-  /// que el cliente escriba su contraseña aquí.
+  /// Abre el registro conservando la empresa seleccionada.
   Future<void> _abrirRegistro() async {
     if (_isLoading) return;
+    final EmpresaTenant? empresa = _empresa;
+    if (empresa == null) {
+      setState(
+        () => _errorMessage = 'Selecciona una empresa para registrarte.',
+      );
+      return;
+    }
 
     final String? correo = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(
-        builder: (_) => const RegistroClientePage(),
+        builder: (_) => RegistroClientePage(
+          empresaSlug: empresa.slug,
+          empresaNombre: empresa.etiqueta,
+        ),
       ),
     );
     if (!mounted) return;
@@ -89,6 +140,68 @@ class _LoginPageState extends State<LoginPage> {
       _passwordController.clear();
       _errorMessage = null;
     });
+  }
+
+  Future<void> _seleccionarEmpresa() async {
+    if (_cargandoEmpresas || _empresas.isEmpty) return;
+    final EmpresaTenant? elegida = await showModalBottomSheet<EmpresaTenant>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 18),
+            const Text(
+              'SELECCIONA TU EMPRESA',
+              style: TextStyle(
+                fontSize: 12,
+                letterSpacing: 2,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 10),
+            for (final EmpresaTenant empresa in _empresas)
+              ListTile(
+                leading: const Icon(
+                  Icons.storefront_rounded,
+                  color: AppColors.primary,
+                ),
+                title: Text(
+                  empresa.etiqueta,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    color: _empresa?.slug == empresa.slug
+                        ? AppColors.primary
+                        : AppColors.textPrimary,
+                    fontWeight: _empresa?.slug == empresa.slug
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                  ),
+                ),
+                subtitle: Text(
+                  empresa.slug,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                trailing: _empresa?.slug == empresa.slug
+                    ? const Icon(Icons.check_rounded, color: AppColors.primary)
+                    : null,
+                onTap: () => Navigator.of(sheetContext).pop(empresa),
+              ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+    if (elegida == null || !mounted) return;
+    setState(() => _empresa = elegida);
   }
 
   void _mostrarProximamente() {
@@ -112,15 +225,6 @@ class _LoginPageState extends State<LoginPage> {
 
   String? _validarPassword(String? value) {
     if (value == null || value.isEmpty) return 'Ingresa tu contraseña.';
-    return null;
-  }
-
-  String? _validarEmpresa(String? value) {
-    final String slug = value?.trim().toLowerCase() ?? '';
-    if (slug.isEmpty) return 'Ingresa el identificador de tu empresa.';
-    if (!RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$').hasMatch(slug)) {
-      return 'Usa letras minúsculas, números y guiones.';
-    }
     return null;
   }
 
@@ -167,7 +271,7 @@ class _LoginPageState extends State<LoginPage> {
             borderRadius: BorderRadius.circular(14),
           ),
           child: const Text(
-            'VANTER MEN',
+            'FASHIONSTORE',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -205,10 +309,12 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Accede a tu cuenta para continuar tu experiencia VANTER MEN.',
+        Text(
+          _empresa == null
+              ? 'Selecciona tu empresa para acceder a tu cuenta.'
+              : 'Accede a ${_empresa!.etiqueta}.',
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 14,
             height: 1.4,
             color: AppColors.textMuted,
@@ -222,14 +328,13 @@ class _LoginPageState extends State<LoginPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _CampoTexto(
-          controller: _empresaController,
-          label: 'Empresa',
-          hint: 'mi-empresa',
-          icon: Icons.business_outlined,
-          textInputAction: TextInputAction.next,
-          enabled: !_isLoading,
-          validator: _validarEmpresa,
+        _SelectorEmpresa(
+          empresa: _empresa,
+          cargando: _cargandoEmpresas,
+          error: _errorEmpresas,
+          habilitado: !_isLoading,
+          onTap: _seleccionarEmpresa,
+          onReintentar: _cargarEmpresas,
         ),
         const SizedBox(height: 18),
         _CampoTexto(
@@ -371,7 +476,176 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-/// Campo de texto con el estilo visual de VANTER MEN.
+/// Selector visual de empresa con estados de carga, error y lista vacía.
+class _SelectorEmpresa extends StatelessWidget {
+  const _SelectorEmpresa({
+    required this.empresa,
+    required this.cargando,
+    required this.error,
+    required this.habilitado,
+    required this.onTap,
+    required this.onReintentar,
+  });
+
+  final EmpresaTenant? empresa;
+  final bool cargando;
+  final String? error;
+  final bool habilitado;
+  final VoidCallback onTap;
+  final VoidCallback onReintentar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Empresa',
+          style: TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (cargando)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Row(
+              children: [
+                SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'Cargando empresas...',
+                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          )
+        else if (error != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.error.withValues(alpha: 0.45),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  error!,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.error,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: onReintentar,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          )
+        else if (empresa == null)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Text(
+              'No hay empresas habilitadas.',
+              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+            ),
+          )
+        else
+          Material(
+            color: AppColors.surfaceVariant,
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              onTap: habilitado ? onTap : null,
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 15,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.primary),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.storefront_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            empresa!.etiqueta,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            empresa!.slug,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.textMuted,
+                      size: 22,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Campo de texto con el estilo visual de la aplicación.
 class _CampoTexto extends StatelessWidget {
   const _CampoTexto({
     required this.controller,
@@ -455,7 +729,7 @@ class _CampoTexto extends StatelessWidget {
   );
 }
 
-/// Botón principal con gradiente de acento lila/magenta.
+/// Botón principal con gradiente de acento.
 class _BotonPrincipal extends StatelessWidget {
   const _BotonPrincipal({
     required this.label,

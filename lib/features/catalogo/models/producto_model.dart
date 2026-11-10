@@ -9,7 +9,9 @@
 // El parsing es defensivo: descripcion puede ser null, precio puede llegar como
 // number o string, y las listas pueden venir vacías.
 
-/// Producto del listado público (`GET /productos`).
+import 'disponibilidad_model.dart';
+
+/// Producto del listado público (`GET /catalogo/public/{slug}/productos`).
 ///
 /// El listado incluye [imagenPrincipalUrl], la URL ya resuelta por el backend
 /// del recurso principal general (fotografía del modelo). Flutter NO construye
@@ -26,6 +28,8 @@ class Producto {
     required this.categoriaId,
     required this.categoriaNombre,
     this.imagenPrincipalUrl,
+    this.precioDefinitivo,
+    this.precioCalculoPendiente = false,
   });
 
   factory Producto.fromJson(Map<String, dynamic> json) => Producto(
@@ -34,11 +38,15 @@ class Producto {
     descripcion: _toNullableString(json['descripcion']),
     precio: _toDouble(json['precio']),
     estado: _toBool(json['estado'], fallback: true),
-    categoriaId: _toInt(json['categoria_id']),
+    categoriaId: _toInt(json['categoria_id']) != 0
+        ? _toInt(json['categoria_id'])
+        : (_idDe(json['categoria']) ?? 0),
     categoriaNombre: _toString(json['categoria_nombre']).trim().isNotEmpty
         ? _toString(json['categoria_nombre'])
         : _categoriaNombre(json['categoria']),
     imagenPrincipalUrl: _toNullableString(json['imagen_principal_url']),
+    precioDefinitivo: _toNullableDouble(json['precio_definitivo']),
+    precioCalculoPendiente: json['precio_calculo_pendiente'] == true,
   );
 
   final int id;
@@ -53,14 +61,25 @@ class Producto {
   /// backend (`imagen_principal_url`). Puede ser `null`.
   final String? imagenPrincipalUrl;
 
+  /// Precio efectivo calculado por el backend (promociones vigentes).
+  final double? precioDefinitivo;
+
+  /// El backend todavía está calculando el precio promocional definitivo.
+  final bool precioCalculoPendiente;
+
   /// Descripción recortada para tarjetas del listado.
   String get descripcionCorta {
     final String texto = descripcion?.trim() ?? '';
     return texto.isEmpty ? 'Sin descripción disponible.' : texto;
   }
 
+  /// Precio que debe mostrarse: si el cálculo promocional está pendiente se
+  /// usa el precio base; nunca se inventa un descuento.
+  double get precioMostrar =>
+      precioCalculoPendiente ? precio : (precioDefinitivo ?? precio);
+
   /// Precio formateado en bolivianos.
-  String get precioFormateado => 'Bs ${precio.toStringAsFixed(2)}';
+  String get precioFormateado => 'Bs ${precioMostrar.toStringAsFixed(2)}';
 }
 
 /// Recurso (imagen) asociado a un producto.
@@ -131,9 +150,9 @@ class VarianteProducto {
         sku: _toString(json['sku']),
         estado: _toBool(json['estado'], fallback: true),
         tallaId: _idDe(json['talla']),
-        tallaNombre: _nombreDe(json['talla']),
+        tallaNombre: _nombreOTexto(json['talla']),
         colorId: _idDe(json['color']),
-        colorNombre: _nombreDe(json['color']),
+        colorNombre: _nombreOTexto(json['color']),
         inventarios: _listaDe(json['inventarios'], InventarioProducto.fromJson),
       );
 
@@ -230,8 +249,11 @@ class ProductoDetalle extends Producto {
     required super.categoriaId,
     required super.categoriaNombre,
     super.imagenPrincipalUrl,
+    super.precioDefinitivo,
+    super.precioCalculoPendiente,
     required this.recursos,
     required this.variantes,
+    this.disponibilidad = const <DisponibilidadVariante>[],
   });
 
   factory ProductoDetalle.fromJson(Map<String, dynamic> json) {
@@ -243,6 +265,10 @@ class ProductoDetalle extends Producto {
       json['variantes'],
       VarianteProducto.fromJson,
     );
+    final List<DisponibilidadVariante> disponibilidad = _listaDe(
+      json['disponibilidad'],
+      DisponibilidadVariante.fromJson,
+    );
 
     return ProductoDetalle(
       id: _toInt(json['id']),
@@ -250,18 +276,31 @@ class ProductoDetalle extends Producto {
       descripcion: _toNullableString(json['descripcion']),
       precio: _toDouble(json['precio']),
       estado: _toBool(json['estado'], fallback: true),
-      categoriaId: _toInt(json['categoria_id']),
+      categoriaId: _toInt(json['categoria_id']) != 0
+          ? _toInt(json['categoria_id'])
+          : (_idDe(json['categoria']) ?? 0),
       categoriaNombre: _toString(json['categoria_nombre']).trim().isNotEmpty
           ? _toString(json['categoria_nombre'])
           : _categoriaNombre(json['categoria']),
       imagenPrincipalUrl: _toNullableString(json['imagen_principal_url']),
+      precioDefinitivo: _toNullableDouble(json['precio_definitivo']),
+      precioCalculoPendiente: json['precio_calculo_pendiente'] == true,
       recursos: recursos,
       variantes: variantes,
+      disponibilidad: disponibilidad,
     );
   }
 
   final List<RecursoProducto> recursos;
   final List<VarianteProducto> variantes;
+
+  /// Filas variante × sucursal del contrato público SaaS.
+  final List<DisponibilidadVariante> disponibilidad;
+
+  /// Filas de disponibilidad con stock mayor a cero.
+  List<DisponibilidadVariante> get disponibilidadConStock => disponibilidad
+      .where((DisponibilidadVariante fila) => fila.stockDisponible > 0)
+      .toList();
 
   /// Recursos utilizables como imágenes, con el principal primero.
   ///
@@ -280,7 +319,24 @@ class ProductoDetalle extends Producto {
         secundarios.add(recurso);
       }
     }
-    return <RecursoProducto>[...principales, ...secundarios];
+    final List<RecursoProducto> usables = <RecursoProducto>[
+      ...principales,
+      ...secundarios,
+    ];
+    final String? imagen = imagenPrincipalUrl?.trim();
+    if (usables.isEmpty && imagen != null && imagen.isNotEmpty) {
+      // Fallback con la URL YA entregada por el backend (no se construye).
+      return <RecursoProducto>[
+        RecursoProducto(
+          id: id,
+          tipo: 'imagen',
+          url: imagen,
+          esPrincipal: true,
+          colorNombre: null,
+        ),
+      ];
+    }
+    return usables;
   }
 
   /// Recurso principal (o el primero disponible) si existe.
@@ -322,6 +378,7 @@ class ProductoDetalle extends Producto {
   ///
   /// Es la condición para poder agregar el producto al carrito (CU15).
   bool get tieneInventarioConStock =>
+      disponibilidad.any((DisponibilidadVariante fila) => fila.tieneStock) ||
       variantes.any((VarianteProducto variante) => variante.tieneStock);
 }
 
@@ -438,6 +495,18 @@ double _toDouble(Object? value) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value) ?? 0;
   return 0;
+}
+
+double? _toNullableDouble(Object? value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  if (value is String) {
+    final String limpio = value.trim();
+    if (limpio.isEmpty) return null;
+    return double.tryParse(limpio);
+  }
+  return null;
 }
 
 bool _toBool(Object? value, {bool fallback = false}) {

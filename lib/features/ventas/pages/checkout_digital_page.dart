@@ -85,9 +85,34 @@ class _CheckoutDigitalPageState extends State<CheckoutDigitalPage> {
       final CarritoDetalle carrito = await _carritoService.obtenerCarrito(
         widget.carritoId,
       );
+      VentaDigital? recuperada;
+      if (!carrito.estaActivo) {
+        // Recupera la referencia de una venta ya creada para este carrito,
+        // sin volver a llamar a /ventas/digital (no se duplica la venta).
+        final pending = await _ventaService.leerCheckoutPendiente(
+          widget.carritoId,
+        );
+        if (pending != null) {
+          recuperada = VentaDigital.fromJson(<String, dynamic>{
+            'venta_id': pending.ventaId,
+            'carrito_id': pending.carritoId,
+            'cliente_id': 0,
+            'sucursal_id': carrito.sucursalId,
+            'sucursal_nombre': pending.sucursalNombre.isEmpty
+                ? carrito.sucursalNombre
+                : pending.sucursalNombre,
+            'canal': VentaDigitalService.canalMovil,
+            'estado': pending.estado,
+            'total': pending.total,
+            'cantidad_total_unidades': carrito.cantidadTotalUnidades,
+            'items': const <Object>[],
+          });
+        }
+      }
       if (!mounted) return;
       setState(() {
         _carrito = carrito;
+        _venta = recuperada;
         _cargando = false;
       });
     } on CarritoException catch (error) {
@@ -237,6 +262,8 @@ class _CheckoutDigitalPageState extends State<CheckoutDigitalPage> {
     );
     if (!mounted) return;
     if (pagada == true) {
+      await _ventaService.limpiarCheckoutPendiente(venta.ventaId);
+      if (!mounted) return;
       _volverAlListado();
     }
   }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/session/session_expired.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../catalogo/models/catalogo_filtros_model.dart';
+import '../../catalogo/models/disponibilidad_model.dart';
 import '../../catalogo/models/producto_model.dart';
 import '../models/carrito_model.dart';
 import '../pages/carrito_detalle_page.dart';
@@ -9,22 +11,26 @@ import '../services/carrito_service.dart';
 import 'boton_gradiente.dart';
 import 'cantidad_stepper.dart';
 
-/// Sección "Agregar al carrito" dentro del detalle de producto (CU15).
+/// Sección "Agregar al carrito" dentro del detalle de producto (CU15 SaaS).
 ///
-/// La combinación seleccionable (sucursal, talla, color y temporada) se deriva
-/// de los INVENTARIOS REALES que el backend entrega en `GET /productos/{id}`
-/// (`variantes[].inventarios`). Nunca se inventan ids: el `inventario_id` que
-/// consume `POST /carritos/items` sale de la combinación elegida.
+/// La disponibilidad proviene del detalle público
+/// (`disponibilidad[]`: variante × sucursal × temporada). El carrito SaaS
+/// recibe `variante_producto_id` + `temporada_id`; el backend resuelve el
+/// inventario y valida stock. Nunca se inventan identificadores.
 class AgregarAlCarritoSection extends StatefulWidget {
   const AgregarAlCarritoSection({
     super.key,
     required this.producto,
+    this.filtros,
     this.onRecargar,
     this.service,
   });
 
-  /// Producto con sus variantes e inventarios reales.
+  /// Producto con variantes y disponibilidad reales.
   final ProductoDetalle producto;
+
+  /// Filtros del catálogo: permiten resolver el `temporada_id` por nombre.
+  final CatalogoFiltros? filtros;
 
   /// Recarga el producto (por ejemplo, tras un 409 por stock insuficiente).
   final VoidCallback? onRecargar;
@@ -54,43 +60,60 @@ class _AgregarAlCarritoSectionState extends State<AgregarAlCarritoSection> {
   void initState() {
     super.initState();
     _service = widget.service ?? CarritoService();
-    _combinaciones = _construirCombinaciones(widget.producto);
+    _combinaciones = _construirCombinaciones(widget.producto, widget.filtros);
     _seleccionarOpcionesUnicas();
   }
 
   @override
   void didUpdateWidget(AgregarAlCarritoSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Si el producto se recarga (por ejemplo tras un conflicto de stock) se
-    // reconstruyen las combinaciones reales y se limpia lo inválido.
-    if (!identical(oldWidget.producto, widget.producto)) {
-      _combinaciones = _construirCombinaciones(widget.producto);
+    if (!identical(oldWidget.producto, widget.producto) ||
+        !identical(oldWidget.filtros, widget.filtros)) {
+      _combinaciones = _construirCombinaciones(widget.producto, widget.filtros);
       _limpiarSeleccionInvalida();
       _seleccionarOpcionesUnicas();
     }
   }
 
-  /// Construye las combinaciones reales (variante × inventario).
-  static List<_Combinacion> _construirCombinaciones(ProductoDetalle producto) {
+  /// Resuelve el `temporada_id` desde el nombre usando los filtros públicos.
+  ///
+  /// Solo acepta una coincidencia única; si no hay o es ambigua devuelve null
+  /// y la UI bloquea el alta en lugar de adivinar.
+  static int? _temporadaId(CatalogoFiltros? filtros, String nombreTemporada) {
+    final String buscado = nombreTemporada.trim().toLowerCase();
+    if (filtros == null || buscado.isEmpty) return null;
+    final List<OpcionFiltro> coincidencias = filtros.temporadas
+        .where(
+          (OpcionFiltro temporada) =>
+              temporada.nombre.trim().toLowerCase() == buscado,
+        )
+        .toList();
+    return coincidencias.length == 1 ? coincidencias.first.id : null;
+  }
+
+  /// Construye las combinaciones reales del contrato público SaaS.
+  static List<_Combinacion> _construirCombinaciones(
+    ProductoDetalle producto,
+    CatalogoFiltros? filtros,
+  ) {
     final List<_Combinacion> resultado = <_Combinacion>[];
-    for (final VarianteProducto variante in producto.variantes) {
-      for (final InventarioProducto inventario in variante.inventarios) {
-        final int? sucursalId = inventario.sucursalId;
-        if (sucursalId == null || sucursalId <= 0 || inventario.id <= 0) {
-          continue;
-        }
-        resultado.add(
-          _Combinacion(
-            sucursalId: sucursalId,
-            sucursalNombre: inventario.sucursalEtiqueta,
-            talla: variante.tallaNombre.trim(),
-            color: variante.colorNombre.trim(),
-            temporada: inventario.temporadaNombre.trim(),
-            inventarioId: inventario.id,
-            stockDisponible: inventario.stockDisponible,
-          ),
-        );
-      }
+    for (final DisponibilidadVariante fila in producto.disponibilidad) {
+      if (fila.varianteId <= 0 || fila.sucursalId <= 0) continue;
+      final int? temporadaId = _temporadaId(filtros, fila.temporada);
+      resultado.add(
+        _Combinacion(
+          sucursalId: fila.sucursalId,
+          sucursalNombre: fila.sucursal.trim().isEmpty
+              ? 'Sucursal ${fila.sucursalId}'
+              : fila.sucursal.trim(),
+          talla: fila.talla.trim(),
+          color: fila.color.trim(),
+          temporada: fila.temporada.trim(),
+          varianteId: fila.varianteId,
+          temporadaId: temporadaId,
+          stockDisponible: fila.stockDisponible,
+        ),
+      );
     }
     return resultado;
   }
@@ -186,7 +209,8 @@ class _AgregarAlCarritoSectionState extends State<AgregarAlCarritoSection> {
       !_agregando &&
       _seleccion != null &&
       _stockDisponible > 0 &&
-      _cantidad >= 1;
+      _cantidad >= 1 &&
+      (_seleccion?.temporadaId ?? 0) > 0;
 
   // -------------------------------------------------------------------------
   // Selección
@@ -280,7 +304,15 @@ class _AgregarAlCarritoSectionState extends State<AgregarAlCarritoSection> {
 
   Future<void> _agregar() async {
     final _Combinacion? seleccion = _seleccion;
-    if (seleccion == null || !_puedeAgregar) return;
+    if (seleccion == null || !_puedeAgregar) {
+      if (seleccion != null && (seleccion.temporadaId ?? 0) <= 0) {
+        _mostrarMensaje(
+          'No se pudo identificar la temporada seleccionada en el catálogo. '
+          'Inténtalo nuevamente.',
+        );
+      }
+      return;
+    }
 
     setState(() {
       _agregando = true;
@@ -288,9 +320,10 @@ class _AgregarAlCarritoSectionState extends State<AgregarAlCarritoSection> {
     });
 
     try {
-      final CarritoDetalle carrito = await _service.agregarItem(
+      final CarritoDetalle carrito = await _service.agregarItemVariante(
         sucursalId: seleccion.sucursalId,
-        inventarioId: seleccion.inventarioId,
+        varianteProductoId: seleccion.varianteId,
+        temporadaId: seleccion.temporadaId!,
         cantidad: _cantidad,
       );
       if (!mounted) return;
@@ -387,6 +420,15 @@ class _AgregarAlCarritoSectionState extends State<AgregarAlCarritoSection> {
           seleccionado: _temporada,
           onSeleccion: _onTemporada,
         ),
+        if (seleccion != null && (seleccion.temporadaId ?? 0) <= 0)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Text(
+              'No se pudo identificar esta temporada en el catálogo actual. '
+              'Elige otra o inténtalo más tarde.',
+              style: TextStyle(fontSize: 12, color: AppColors.error),
+            ),
+          ),
         const SizedBox(height: 16),
         _StockYCantidad(
           seleccion: seleccion,
@@ -716,7 +758,7 @@ class _Opcion<T> {
   final String etiqueta;
 }
 
-/// Combinación real (variante + inventario) lista para el backend.
+/// Combinación real (variante × sucursal × temporada) lista para el backend.
 class _Combinacion {
   const _Combinacion({
     required this.sucursalId,
@@ -724,7 +766,8 @@ class _Combinacion {
     required this.talla,
     required this.color,
     required this.temporada,
-    required this.inventarioId,
+    required this.varianteId,
+    required this.temporadaId,
     required this.stockDisponible,
   });
 
@@ -734,8 +777,11 @@ class _Combinacion {
   final String color;
   final String temporada;
 
-  /// `inventario_id` real que consume `POST /carritos/items`.
-  final int inventarioId;
+  /// `variante_producto_id` real del producto.
+  final int varianteId;
+
+  /// `temporada_id` resuelto de forma inequívoca; `null` si no se pudo.
+  final int? temporadaId;
 
   final int stockDisponible;
 }

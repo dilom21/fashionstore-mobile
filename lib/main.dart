@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_colors.dart';
-import 'core/offline/sync_service.dart';
 import 'features/autenticacion_seguridad/pages/login/login_page.dart';
 import 'features/autenticacion_seguridad/services/auth_service.dart';
 import 'features/inicio/pages/main_navigation_page.dart';
@@ -11,7 +10,7 @@ void main() {
   runApp(const FashionStoreApp());
 }
 
-/// Aplicación móvil de VANTER MEN para CLIENTES.
+/// Aplicación móvil de FASHIONSTORE para CLIENTES.
 ///
 /// Al arrancar comprueba si existe una sesión guardada válida antes de mostrar
 /// el login, evitando un parpadeo entre Login e Inicio.
@@ -22,7 +21,7 @@ class FashionStoreApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'VANTER MEN',
+      title: 'FASHIONSTORE',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -55,19 +54,13 @@ class _SessionGateState extends State<_SessionGate> {
   @override
   void initState() {
     super.initState();
-    _restauracion = _restaurarYSincronizar();
+    _restauracion = _restaurarSesion();
   }
 
-  Future<bool> _restaurarYSincronizar() async {
-    final bool restored = await _authService.restaurarSesion();
-    if (restored) {
-      try {
-        await OfflineSyncService().synchronize();
-      } catch (_) {
-        // El arranque offline no se bloquea por una sincronización pendiente.
-      }
-    }
-    return restored;
+  Future<bool> _restaurarSesion() async {
+    // No se ejecuta sincronización automática de operaciones comerciales:
+    // reservas/ventas offline aún no tienen idempotencia durable certificada.
+    return _authService.restaurarSesion();
   }
 
   @override
@@ -105,7 +98,7 @@ class _SplashLoadingScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
-                'VANTER MEN',
+                'FASHIONSTORE',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,

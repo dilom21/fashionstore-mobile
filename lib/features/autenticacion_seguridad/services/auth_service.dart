@@ -23,24 +23,27 @@ class AuthException implements Exception {
   String toString() => 'AuthException($message)';
 }
 
-/// Servicio de autenticación exclusivo para CLIENTES de VANTER MEN.
+/// Servicio de autenticación exclusivo para CLIENTES del SaaS multitenant.
 ///
 /// Flujo: Page -> Service -> Backend FastAPI.
 /// Consume únicamente endpoints de cliente:
-///   POST /auth/clientes/login
-///   POST /auth/clientes/registro (público, no emite token)
-///   GET  /auth/me
+///   GET  /auth/tenant/empresas
+///   POST /auth/tenant/login
+///   POST /auth/tenant/clientes/registro (público, no emite token)
+///   GET  /auth/tenant/me
 ///
-/// Nunca usa `POST /auth/personal/login` (personal interno del sistema web).
+/// Nunca usa `POST /auth/personal/login` ni endpoints legacy de clientes.
 class AuthService {
   /// Crea el servicio, permitiendo inyectar almacenamiento y cliente HTTP.
   AuthService({
     AuthStorage? storage,
     http.Client? client,
     LocalDatabase? database,
+    String? baseUrl,
   }) : _storage = storage ?? AuthStorage(),
        _client = client ?? http.Client(),
-       _database = database ?? LocalDatabase.instance;
+       _database = database ?? LocalDatabase.instance,
+       _baseUrl = (baseUrl ?? ApiConfig.baseUrl).trim();
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -62,10 +65,63 @@ class AuthService {
       'Revisa los datos ingresados e inténtalo nuevamente.';
   static const String _registroServidorMessage =
       'No pudimos crear tu cuenta. Inténtalo nuevamente.';
+  static const String _empresaNoDisponibleMessage =
+      'La empresa seleccionada ya no está disponible para registro.';
+  static const String _empresasConnectionMessage =
+      'No pudimos cargar las empresas. Verifica tu conexión e inténtalo nuevamente.';
+  static const String _sessionContextMessage =
+      'La sesión no corresponde a un cliente de esta empresa.';
 
   final AuthStorage _storage;
   final http.Client _client;
   final LocalDatabase _database;
+  final String _baseUrl;
+
+  /// Obtiene las empresas habilitadas para el selector visual de login.
+  ///
+  /// Endpoint público: no envía JWT ni datos administrativos.
+  Future<List<EmpresaTenant>> listarEmpresas() async {
+    _asegurarConfiguracion();
+
+    final http.Response response;
+    try {
+      response = await _client
+          .get(
+            Uri.parse('$_baseUrl/auth/tenant/empresas'),
+            headers: const <String, String>{'Accept': 'application/json'},
+          )
+          .timeout(_timeout);
+    } catch (_) {
+      throw const AuthException(_empresasConnectionMessage);
+    }
+
+    if (response.statusCode == 200) {
+      try {
+        final Object? decoded = jsonDecode(response.body);
+        if (decoded is! List) {
+          throw const AuthException(_unexpectedErrorMessage);
+        }
+        final List<EmpresaTenant> empresas = decoded
+            .whereType<Map>()
+            .map(
+              (Map item) =>
+                  EmpresaTenant.fromJson(item.cast<String, dynamic>()),
+            )
+            .where((EmpresaTenant empresa) => empresa.slug.isNotEmpty)
+            .toList();
+        return empresas;
+      } catch (_) {
+        throw const AuthException(_unexpectedErrorMessage);
+      }
+    }
+
+    if (response.statusCode == 503) {
+      throw const AuthException(
+        'El selector de empresas aún no está disponible.',
+      );
+    }
+    throw const AuthException(_unexpectedErrorMessage);
+  }
 
   /// Autentica a un CLIENTE y guarda su token JWT si el contexto es `cliente`.
   Future<ClienteLoginResponse> loginCliente({
@@ -75,17 +131,22 @@ class AuthService {
   }) async {
     _asegurarConfiguracion();
 
+    final String slug = empresaSlug.trim().toLowerCase();
+    if (slug.isEmpty) {
+      throw const AuthException('Selecciona una empresa para iniciar sesión.');
+    }
+
     final LoginRequest request = LoginRequest(
       correo: correo,
       password: password,
-      empresaSlug: empresaSlug.trim().toLowerCase(),
+      empresaSlug: slug,
     );
 
     final http.Response response;
     try {
       response = await _client
           .post(
-            Uri.parse(ApiConfig.clientesLoginUrl),
+            Uri.parse('$_baseUrl/auth/tenant/login'),
             headers: const <String, String>{
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -110,15 +171,17 @@ class AuthService {
       // La app móvil es solo para CLIENTES.
       if (resultado.usuario.contexto != 'cliente') {
         await _storage.clearSession();
-        throw const AuthException(_invalidSessionMessage);
+        throw const AuthException(_sessionContextMessage);
       }
 
       await _storage.saveToken(resultado.accessToken);
       try {
         final UsuarioAuth me = await obtenerUsuarioActual();
-        if (me.contexto != 'cliente' || me.empresaId != resultado.empresaId) {
+        if (me.contexto != 'cliente' ||
+            me.empresaId != resultado.empresaId ||
+            me.empresaSlug.trim().toLowerCase() != slug) {
           await _storage.clearSession();
-          throw const AuthException(_invalidSessionMessage);
+          throw const AuthException(_sessionContextMessage);
         }
         await _storage.saveSession(
           TenantSession(
@@ -126,6 +189,15 @@ class AuthService {
             usuarioId: me.id,
             empresaSlug: me.empresaSlug,
             empresaNombre: me.empresaNombre,
+            contexto: me.contexto,
+            rol: me.rol,
+            correo: me.correo.trim().isEmpty
+                ? correo.trim().toLowerCase()
+                : me.correo,
+            nombre: me.nombre,
+            apellido: me.apellido,
+            sucursalId: me.sucursalId,
+            planCodigo: me.planCodigo,
           ),
         );
       } on AuthException {
@@ -140,11 +212,19 @@ class AuthService {
     if (response.statusCode == 401) {
       throw const AuthException(_credentialsErrorMessage);
     }
+    if (response.statusCode == 422) {
+      throw const AuthException(_invalidSessionMessage);
+    }
+    if (response.statusCode == 503) {
+      throw const AuthException(
+        'El servicio de autenticación no está disponible. Inténtalo más tarde.',
+      );
+    }
 
     throw const AuthException(_unexpectedErrorMessage);
   }
 
-  /// Registra una cuenta de CLIENTE (`POST /auth/clientes/registro`).
+  /// Registra una cuenta de CLIENTE (`POST /auth/tenant/clientes/registro`).
   ///
   /// Endpoint PÚBLICO: no envía `Authorization` ni requiere sesión. La
   /// respuesta 201 NO incluye `access_token`, por lo que este método **no**
@@ -159,7 +239,7 @@ class AuthService {
     try {
       response = await _client
           .post(
-            Uri.parse(ApiConfig.clientesRegistroLegacyUrl),
+            Uri.parse('$_baseUrl/auth/tenant/clientes/registro'),
             headers: const <String, String>{
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -188,15 +268,26 @@ class AuthService {
     throw _errorRegistro(response);
   }
 
-  /// Traduce el error del registro a un mensaje apto para el cliente.
+  /// Traduce el error del registro SaaS a un mensaje apto para el cliente.
   ///
-  /// El backend documenta: 409 correo o CI duplicado; 422 contraseña insegura,
-  /// contraseñas distintas, sexo inválido, fecha futura o datos inválidos.
+  /// Contrato real: 400 política de contraseña/confirmación; 404 empresa no
+  /// disponible; 409 correo o CI duplicado; 422 datos inválidos; 503 registro
+  /// empresarial no disponible.
   AuthException _errorRegistro(http.Response response) {
     final String detail = _leerDetail(response.body);
     final String detalle = detail.toLowerCase();
 
     switch (response.statusCode) {
+      case 400:
+        if (detalle.contains('no coinciden')) {
+          return const AuthException(_registroPasswordsMessage);
+        }
+        if (detail.isNotEmpty && detalle.contains('contrase')) {
+          return AuthException(detail);
+        }
+        return const AuthException(_registroDatosMessage);
+      case 404:
+        return const AuthException(_empresaNoDisponibleMessage);
       case 409:
         if (detalle.contains('documento') || detalle.contains(' ci')) {
           return const AuthException(_registroDocumentoDuplicadoMessage);
@@ -211,6 +302,10 @@ class AuthService {
           return AuthException(detail);
         }
         return const AuthException(_registroDatosMessage);
+      case 503:
+        return const AuthException(
+          'El registro de empresas aún no está disponible. Inténtalo más tarde.',
+        );
       default:
         return const AuthException(_registroServidorMessage);
     }
@@ -259,7 +354,7 @@ class AuthService {
     try {
       response = await _client
           .get(
-            Uri.parse(ApiConfig.authMeUrl),
+            Uri.parse('$_baseUrl/auth/tenant/me'),
             headers: <String, String>{
               'Accept': 'application/json',
               'Authorization': 'Bearer $token',
@@ -289,12 +384,21 @@ class AuthService {
     throw const AuthException(_unexpectedErrorMessage);
   }
 
+  /// Lee la sesión tenant local (sin validar contra el backend).
+  Future<TenantSession?> leerSesion() async {
+    try {
+      return await _storage.readSession();
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Intenta restaurar una sesión guardada.
   ///
   /// Devuelve `true` solo si existe un token válido y el contexto es `cliente`.
   /// Si el token fue rechazado por el backend, se elimina localmente.
   Future<bool> restaurarSesion() async {
-    if (!ApiConfig.isConfigured) return false;
+    if (_baseUrl.isEmpty) return false;
 
     final String? token;
     try {
@@ -309,7 +413,12 @@ class AuthService {
     } catch (_) {
       return false;
     }
-    if (localSession == null) return false;
+    if (localSession == null ||
+        localSession.empresaId <= 0 ||
+        localSession.usuarioId <= 0 ||
+        localSession.empresaSlug.trim().isEmpty) {
+      return false;
+    }
 
     try {
       final UsuarioAuth usuario = await obtenerUsuarioActual();
@@ -317,13 +426,31 @@ class AuthService {
         await _storage.clearSession();
         return false;
       }
-      final TenantSession? session = await _storage.readSession();
-      if (session == null ||
-          session.usuarioId != usuario.id ||
-          session.empresaId != usuario.empresaId) {
+      if (localSession.usuarioId != usuario.id ||
+          localSession.empresaId != usuario.empresaId ||
+          localSession.empresaSlug.trim().toLowerCase() !=
+              usuario.empresaSlug.trim().toLowerCase()) {
         await _storage.clearSession();
         return false;
       }
+      // Se refresca el perfil real (puede haber cambiado nombre/sucursal).
+      await _storage.saveSession(
+        TenantSession(
+          empresaId: usuario.empresaId,
+          usuarioId: usuario.id,
+          empresaSlug: usuario.empresaSlug,
+          empresaNombre: usuario.empresaNombre,
+          contexto: usuario.contexto,
+          rol: usuario.rol,
+          correo: usuario.correo.trim().isEmpty
+              ? localSession.correo
+              : usuario.correo,
+          nombre: usuario.nombre,
+          apellido: usuario.apellido,
+          sucursalId: usuario.sucursalId,
+          planCodigo: usuario.planCodigo,
+        ),
+      );
       return true;
     } on AuthException catch (error) {
       if (error.unauthorized) {
@@ -331,7 +458,8 @@ class AuthService {
         return false;
       }
       // Sin conectividad se conserva la sesión tenant local para permitir
-      // catálogo cacheado y captura de operaciones offline.
+      // catálogo cacheado y consulta offline. No se procesa ninguna operación
+      // comercial pendiente.
       return true;
     } catch (_) {
       return false;
@@ -341,9 +469,8 @@ class AuthService {
   /// Elimina el token JWT local (cierre de sesión).
   ///
   /// No existe endpoint de logout en el backend: el JWT se descarta en el
-  /// dispositivo. Además se limpia la caché y la cola offline del scope
-  /// `empresa:usuario` para que no sobrevivan al cierre de sesión; esa
-  /// limpieza es best-effort y nunca bloquea el logout.
+  /// dispositivo. Solo se limpia la caché de lectura del scope actual; las
+  /// operaciones offline pendientes NO se borran silenciosamente.
   Future<void> cerrarSesion() async {
     TenantSession? session;
     try {
@@ -354,14 +481,15 @@ class AuthService {
     await _storage.clearSession();
     if (session == null) return;
     try {
-      await _database.clearScope(session.scopeKey);
+      await _storage.clearPendingCheckout(session.scopeKey);
+      await _database.clearCacheScope(session.scopeKey);
     } catch (_) {
       // La sesión ya quedó cerrada; el almacenamiento local es prescindible.
     }
   }
 
   void _asegurarConfiguracion() {
-    if (!ApiConfig.isConfigured) {
+    if (_baseUrl.isEmpty) {
       throw const AuthException(ApiConfig.missingBaseUrlHint);
     }
   }

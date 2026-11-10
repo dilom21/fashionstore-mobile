@@ -78,7 +78,9 @@ class ReservaItem {
     inventarioId: _toInt(json['inventario_id']),
     productoId: _toInt(json['producto_id']),
     productoNombre: _toString(json['producto_nombre']),
-    imagenPrincipal: _toNullableString(json['imagen_principal']),
+    imagenPrincipal: _toNullableString(
+      json['imagen_principal'] ?? json['imagen_principal_url'],
+    ),
     varianteProductoId: _toNullableInt(json['variante_producto_id']),
     sku: _toString(json['sku']),
     tallaId: _toNullableInt(json['talla_id']),
@@ -136,7 +138,9 @@ class ReservaDetalle {
     estado: _toString(json['estado']),
     observacion: _toNullableString(json['observacion']),
     items: _listaDe(json['items'], ReservaItem.fromJson),
-    cantidadTotalUnidades: _toInt(json['cantidad_total_unidades']),
+    cantidadTotalUnidades: _toInt(
+      json['cantidad_total_unidades'] ?? json['cantidad_unidades'],
+    ),
   );
 
   final int reservaId;
@@ -240,18 +244,30 @@ class ReservaListaResponse {
   const ReservaListaResponse({
     required this.items,
     required this.totalReservas,
+    this.limit = 0,
+    this.offset = 0,
   });
 
-  factory ReservaListaResponse.fromJson(Map<String, dynamic> json) =>
-      ReservaListaResponse(
-        items: _listaDe(json['items'], ReservaResumen.fromJson),
-        totalReservas: _toInt(json['total_reservas']),
-      );
+  factory ReservaListaResponse.fromJson(Map<String, dynamic> json) {
+    final Object? items = json['items'];
+    return ReservaListaResponse(
+      items: _listaDe(items, ReservaResumen.fromJson),
+      totalReservas: _toInt(json['total'] ?? json['total_reservas']),
+      limit: _toInt(json['limit'] ?? (items is List ? items.length : 0)),
+      offset: _toInt(json['offset']),
+    );
+  }
 
   final List<ReservaResumen> items;
 
   /// Total de reservas reportado por el backend (fuente de verdad).
   final int totalReservas;
+
+  /// Página solicitada (contrato SaaS).
+  final int limit;
+
+  /// Desplazamiento solicitado (contrato SaaS).
+  final int offset;
 
   bool get estaVacio => items.isEmpty;
 }

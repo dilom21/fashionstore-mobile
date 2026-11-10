@@ -1,6 +1,6 @@
 // Política de contraseña de CLIENTES de VANTER MEN.
 //
-// Es la MISMA regla que valida el backend en `POST /auth/clientes/registro` y
+// Es la MISMA regla que valida el backend en `POST /auth/tenant/clientes/registro` y
 // replica exactamente el util del cliente Web
 // (`auth/utils/password-strength.util.ts`):
 //
@@ -24,13 +24,7 @@ const int passwordMaxLongitud = 128;
 enum NivelPassword { insegura, media, segura }
 
 /// Clave de cada requisito del checklist.
-enum ClaveRequisitoPassword {
-  longitud,
-  mayuscula,
-  minuscula,
-  numero,
-  especial,
-}
+enum ClaveRequisitoPassword { longitud, mayuscula, minuscula, numero, especial }
 
 /// Resultado de evaluar una contraseña contra la política real.
 class PasswordStrength {

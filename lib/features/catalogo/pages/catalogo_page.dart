@@ -88,17 +88,20 @@ class _CatalogoPageState extends State<CatalogoPage> {
 
     try {
       final List<Producto> productos = _modoOffline
-          ? await _offlineReader.listar(buscar: _busquedaController.text, soloConStock: _seleccion.soloConStock)
+          ? await _offlineReader.listar(
+              buscar: _busquedaController.text,
+              soloConStock: _seleccion.soloConStock,
+            )
           : await _service.listarProductos(
-        buscar: _busquedaController.text,
-        categoriaId: _seleccion.categoriaId,
-        tallaId: _seleccion.tallaId,
-        colorId: _seleccion.colorId,
-        temporadaId: _seleccion.temporadaId,
-        coleccionId: _seleccion.coleccionId,
-        sucursalId: _seleccion.sucursalId,
-        conStock: _seleccion.soloConStock ? true : null,
-      );
+              buscar: _busquedaController.text,
+              categoriaId: _seleccion.categoriaId,
+              tallaId: _seleccion.tallaId,
+              colorId: _seleccion.colorId,
+              temporadaId: _seleccion.temporadaId,
+              coleccionId: _seleccion.coleccionId,
+              sucursalId: _seleccion.sucursalId,
+              conStock: _seleccion.soloConStock ? true : null,
+            );
       if (!mounted) return;
       setState(() {
         _productos = productos;
@@ -153,9 +156,9 @@ class _CatalogoPageState extends State<CatalogoPage> {
         builder: (_) => ProductoDetallePage(
           productoId: producto.id,
           filtros: _filtros,
-              service: _service,
-              offline: _modoOffline,
-              offlineReader: _offlineReader,
+          service: _service,
+          offline: _modoOffline,
+          offlineReader: _offlineReader,
         ),
       ),
     );
@@ -187,12 +190,25 @@ class _CatalogoPageState extends State<CatalogoPage> {
           IconButton(
             tooltip: 'Preparar uso sin conexión',
             onPressed: _descargandoOffline ? null : _descargarOffline,
-            icon: Icon(_descargandoOffline ? Icons.sync : Icons.download_for_offline_outlined),
+            icon: Icon(
+              _descargandoOffline
+                  ? Icons.sync
+                  : Icons.download_for_offline_outlined,
+            ),
           ),
           IconButton(
-            tooltip: _modoOffline ? 'Volver al catálogo online' : 'Consultar copia local',
-            onPressed: _offlineStatus == null ? null : () { setState(() => _modoOffline = !_modoOffline); _cargarProductos(); },
-            icon: Icon(_modoOffline ? Icons.cloud_outlined : Icons.offline_bolt_outlined),
+            tooltip: _modoOffline
+                ? 'Volver al catálogo online'
+                : 'Consultar copia local',
+            onPressed: _offlineStatus == null
+                ? null
+                : () {
+                    setState(() => _modoOffline = !_modoOffline);
+                    _cargarProductos();
+                  },
+            icon: Icon(
+              _modoOffline ? Icons.cloud_outlined : Icons.offline_bolt_outlined,
+            ),
           ),
           const SizedBox(width: 8),
         ],
@@ -211,15 +227,39 @@ class _CatalogoPageState extends State<CatalogoPage> {
     );
   }
 
-  Widget _buildAvisoOffline() => Container(width: double.infinity, margin: const EdgeInsets.fromLTRB(20, 4, 20, 8), padding: const EdgeInsets.all(10), color: AppColors.surfaceVariant, child: Text('Copia local · ${_offlineStatus?['download_completed_at'] ?? 'fecha no disponible'} · existencias no confirmadas', style: const TextStyle(fontSize: 12, color: AppColors.textPrimary)));
+  Widget _buildAvisoOffline() => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+    padding: const EdgeInsets.all(10),
+    color: AppColors.surfaceVariant,
+    child: Text(
+      'Copia local · ${_offlineStatus?['download_completed_at'] ?? 'fecha no disponible'} · existencias no confirmadas',
+      style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+    ),
+  );
 
   Future<void> _descargarOffline() async {
     setState(() => _descargandoOffline = true);
     try {
       await _offline.download();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Catálogo guardado para consulta posterior.')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Catálogo guardado para consulta posterior.'),
+          ),
+        );
+      }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo preparar el modo offline: $error')));
+      final String detalle = error is StateError
+          ? error.message.toString()
+          : 'Inténtalo nuevamente.';
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo preparar el modo offline: $detalle'),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _descargandoOffline = false);
     }
